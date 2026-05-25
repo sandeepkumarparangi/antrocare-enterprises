@@ -81,14 +81,33 @@ function App() {
     }, {});
   }, [products, isAdmin]);
 
-  function handleAdminLogin(event) {
+  async function handleAdminLogin(event) {
     event.preventDefault();
     const key = adminDraftKey.trim();
     if (!key) return;
-    sessionStorage.setItem(ADMIN_SESSION_KEY, key);
-    setAdminKey(key);
-    setAdminDraftKey("");
-    setView("admin");
+    setLoading(true);
+
+    try {
+      const [productData, categoryData, summaryData] = await Promise.all([
+        fetchProducts(key),
+        fetchCategories(),
+        fetchSummary()
+      ]);
+      setProducts(productData);
+      setCategories(["All", ...categoryData]);
+      setSummary(summaryData);
+      sessionStorage.setItem(ADMIN_SESSION_KEY, key);
+      setAdminKey(key);
+      setAdminDraftKey("");
+      setStatusMessage("Admin console unlocked.");
+      setView("admin");
+    } catch (error) {
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
+      setAdminKey("");
+      setStatusMessage("Invalid admin passcode.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function signOut() {
@@ -105,6 +124,7 @@ function App() {
     try {
       const updated = await updateProduct(product, adminKey);
       setProducts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setSummary(await fetchSummary());
       setStatusMessage(`${updated.name} updated.`);
     } catch (error) {
       setStatusMessage("Admin update failed. Check the passcode and backend server.");
