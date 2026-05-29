@@ -71,4 +71,60 @@
   .table-cell {
     @apply px-4 py-4 align-middle;
   }
+
+  .product-card {
+    @apply overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-soft;
+  }
+
+  .product-media-link {
+    @apply relative block w-full overflow-hidden bg-white text-left;
+  }
+
+  .product-image-stage {
+    @apply relative block overflow-hidden bg-white;
+    aspect-ratio: 1.95 / 1;
+  }
+
+  .product-image-stage-full {
+    aspect-ratio: 16 / 10;
+    max-height: min(68vh, 720px);
+  }
+
+  .product-image {
+    @apply h-full w-full object-cover object-top transition duration-500 ease-out;
+    filter: saturate(1.03) contrast(1.02);
+  }
+
+  .group:hover .product-image {
+    transform: scale(1.055);
+  }
+
+  .product-image-full {
+    @apply h-full w-full object-contain;
+    filter: saturate(1.03) contrast(1.02);
+  }
+
+  .product-page-badge {
+    @apply absolute right-3 top-3 rounded-md border border-white/70 bg-white/90 px-2.5 py-1 text-xs font-black text-slate-600 shadow-sm backdrop-blur;
+  }
+
+  .image-action-badge {
+    @apply absolute bottom-5 right-5 grid h-10 w-10 place-items-center rounded-lg bg-slate-950/85 text-white opacity-0 shadow-lg transition duration-300 group-hover:opacity-100;
+  }
+
+  .admin-product-thumb {
+    @apply block h-16 w-20 shrink-0 overflow-hidden rounded-lg bg-white;
+  }
+
+  .admin-product-thumb img {
+    @apply h-full w-full object-cover object-top;
+  }
+
+  .image-modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm;
+  }
+
+  .image-modal-panel {
+    @apply max-h-[92vh] w-full max-w-5xl overflow-auto rounded-lg border border-white/20 bg-white shadow-2xl;
+  }
 }

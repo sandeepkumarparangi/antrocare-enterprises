@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  ArrowUpRight,
   BadgeIndianRupee,
   Boxes,
   CheckCircle2,
   ClipboardList,
-  EyeOff,
-  LayoutDashboard,
   LockKeyhole,
   LogOut,
   Mail,
   MapPin,
+  Maximize2,
   Phone,
   Search,
   ShieldCheck,
@@ -20,7 +20,7 @@ import {
   Store,
   X
 } from "lucide-react";
-import { fetchCategories, fetchProducts, fetchSummary, updateProduct } from "./api";
+import { fetchCategories, fetchProducts, fetchSummary, mediaUrl, updateProduct } from "./api";
 
 const ADMIN_SESSION_KEY = "antrocare-admin-key";
 const DEFAULT_COST = "Price on request";
@@ -35,6 +35,7 @@ function App() {
   const [adminKey, setAdminKey] = useState(() => sessionStorage.getItem(ADMIN_SESSION_KEY) || "");
   const [adminDraftKey, setAdminDraftKey] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [previewProduct, setPreviewProduct] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const isAdmin = Boolean(adminKey);
@@ -42,6 +43,25 @@ function App() {
   useEffect(() => {
     loadCatalog(adminKey);
   }, [adminKey]);
+
+  useEffect(() => {
+    if (!previewProduct) return undefined;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setPreviewProduct(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [previewProduct]);
 
   async function loadCatalog(key = "") {
     setLoading(true);
@@ -146,6 +166,7 @@ function App() {
           setQuery={setQuery}
           summary={summary}
           loading={loading}
+          onPreview={setPreviewProduct}
         />
       ) : (
         <AdminPage
@@ -167,6 +188,7 @@ function App() {
       )}
 
       {statusMessage ? <Toast message={statusMessage} onClose={() => setStatusMessage("")} /> : null}
+      {previewProduct ? <ImagePreviewModal product={previewProduct} onClose={() => setPreviewProduct(null)} /> : null}
       <ContactSection />
     </div>
   );
@@ -213,7 +235,7 @@ function CatalogPage(props) {
     <main>
       <Hero summary={props.summary} />
       <CatalogControls {...props} />
-      <ProductGrid products={props.products} loading={props.loading} />
+      <ProductGrid products={props.products} loading={props.loading} onPreview={props.onPreview} />
       <BrochureStrip />
     </main>
   );
@@ -222,7 +244,10 @@ function CatalogPage(props) {
 function Hero({ summary }) {
   return (
     <section className="relative overflow-hidden bg-white">
-      <div className="absolute inset-0 bg-[url('/rendered/page-02.png')] bg-cover bg-center opacity-10" />
+      <div
+        className="absolute inset-0 bg-cover bg-center opacity-10"
+        style={{ backgroundImage: `url(${mediaUrl("/rendered/page-02.png")})` }}
+      />
       <div className="relative mx-auto grid min-h-[calc(100vh-80px)] max-w-7xl items-center gap-10 px-4 py-12 lg:grid-cols-[1.05fr_.95fr] lg:px-10">
         <div>
           <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-clinical">
@@ -248,7 +273,7 @@ function Hero({ summary }) {
         </div>
         <div className="grid gap-4">
           <div className="rounded-lg border border-white/80 bg-white/85 p-3 shadow-soft backdrop-blur">
-            <img className="aspect-[.76] w-full rounded-md object-cover" src="/rendered/page-01.png" alt="Antrocare brochure cover" />
+            <img className="aspect-[.76] w-full rounded-md object-cover" src={mediaUrl("/rendered/page-01.png")} alt="Antrocare brochure cover" />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <Metric icon={Boxes} label="Products" value={summary.totalProducts} />
@@ -302,7 +327,7 @@ function CatalogControls({ categories, categoryCounts, selectedCategory, setSele
   );
 }
 
-function ProductGrid({ products, loading }) {
+function ProductGrid({ products, loading, onPreview }) {
   if (loading) {
     return <div className="mx-auto max-w-7xl px-4 pb-16 lg:px-10"><div className="empty-panel">Loading catalog...</div></div>;
   }
@@ -315,7 +340,7 @@ function ProductGrid({ products, loading }) {
       </div>
       {products.length ? (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {products.map((product) => <ProductCard key={product.id} product={product} />)}
+          {products.map((product) => <ProductCard key={product.id} product={product} onPreview={onPreview} />)}
         </div>
       ) : (
         <div className="empty-panel">No products match the current filters.</div>
@@ -324,19 +349,18 @@ function ProductGrid({ products, loading }) {
   );
 }
 
-function ProductCard({ product }) {
+function ProductCard({ product, onPreview }) {
+  const imageSrc = mediaUrl(product.imageUrl);
+  const brochureSrc = mediaUrl(product.brochureUrl);
+
   return (
-    <article className="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-soft">
-      <a className="block bg-gradient-to-br from-emerald-50 to-sky-50" href={product.brochureUrl} target="_blank" rel="noreferrer">
-        <img
-          className="h-56 w-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
-          src={product.imageUrl}
-          alt={product.name}
-          onError={(event) => {
-            event.currentTarget.src = product.brochureUrl;
-          }}
-        />
-      </a>
+    <article className="product-card group">
+      <button className="product-media-link" type="button" onClick={() => onPreview(product)} aria-label={`View ${product.name} image`}>
+        <ProductImage product={product} imageSrc={imageSrc} brochureSrc={brochureSrc} />
+        <span className="image-action-badge" aria-hidden="true">
+          <Maximize2 size={16} />
+        </span>
+      </button>
       <div className="p-5">
         <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
         <h3 className="mt-4 min-h-14 text-xl font-black leading-tight">{product.name}</h3>
@@ -344,11 +368,37 @@ function ProductCard({ product }) {
           <span className="text-xs font-black uppercase text-slate-500">Cost</span>
           <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
         </div>
-        <a className="mt-3 inline-flex text-sm font-black text-ocean" href={product.brochureUrl} target="_blank" rel="noreferrer">
+        <a className="mt-3 inline-flex items-center gap-1.5 text-sm font-black text-ocean" href={brochureSrc} target="_blank" rel="noreferrer">
           Brochure page {product.brochurePage}
+          <ArrowUpRight size={15} />
         </a>
       </div>
     </article>
+  );
+}
+
+function ProductImage({ product, imageSrc, brochureSrc, full = false }) {
+  return (
+    <span className={full ? "product-image-stage product-image-stage-full" : "product-image-stage"}>
+      <img
+        className={full ? "product-image-full" : "product-image"}
+        src={imageSrc}
+        alt={product.name}
+        onError={(event) => {
+          event.currentTarget.onerror = null;
+          event.currentTarget.src = brochureSrc;
+        }}
+      />
+      {!full ? <span className="product-page-badge">Page {product.brochurePage}</span> : null}
+    </span>
+  );
+}
+
+function ProductThumbnail({ product }) {
+  return (
+    <span className="admin-product-thumb">
+      <img src={mediaUrl(product.imageUrl)} alt={product.name} />
+    </span>
   );
 }
 
@@ -405,7 +455,7 @@ function AdminPage(props) {
                 <tr className="border-t border-slate-100" key={product.id}>
                   <td className="table-cell">
                     <div className="flex items-center gap-3 font-black">
-                      <img className="h-14 w-16 rounded-md border border-slate-200 object-contain" src={product.imageUrl} alt={product.name} />
+                      <ProductThumbnail product={product} />
                       {product.name}
                     </div>
                   </td>
@@ -466,9 +516,10 @@ function BrochureStrip() {
         <div className="mt-7 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
           {Array.from({ length: 12 }, (_, index) => {
             const page = String(index + 1).padStart(2, "0");
+            const brochureSrc = mediaUrl(`/rendered/page-${page}.png`);
             return (
-              <a className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-soft" href={`/rendered/page-${page}.png`} key={page} target="_blank" rel="noreferrer">
-                <img className="aspect-[.76] w-full object-cover" src={`/rendered/page-${page}.png`} alt={`Brochure page ${index + 1}`} />
+              <a className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-soft" href={brochureSrc} key={page} target="_blank" rel="noreferrer">
+                <img className="aspect-[.76] w-full object-cover" src={brochureSrc} alt={`Brochure page ${index + 1}`} />
                 <span className="block px-3 py-2 text-sm font-black text-slate-500">Page {index + 1}</span>
               </a>
             );
@@ -476,6 +527,47 @@ function BrochureStrip() {
         </div>
       </div>
     </section>
+  );
+}
+
+function ImagePreviewModal({ product, onClose }) {
+  const imageSrc = mediaUrl(product.imageUrl);
+  const brochureSrc = mediaUrl(product.brochureUrl);
+
+  return (
+    <div
+      className="image-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${product.name} image preview`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div className="image-modal-panel">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4">
+          <div>
+            <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
+            <h2 className="mt-3 text-2xl font-black leading-tight text-ink">{product.name}</h2>
+          </div>
+          <button className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-ink" onClick={onClose} type="button" aria-label="Close image preview">
+            <X size={22} />
+          </button>
+        </div>
+        <div className="p-4">
+          <ProductImage product={product} imageSrc={imageSrc} brochureSrc={brochureSrc} full />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4">
+          <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
+          <a className="btn-secondary min-h-11" href={brochureSrc} target="_blank" rel="noreferrer">
+            <ArrowUpRight size={18} />
+            Brochure page {product.brochurePage}
+          </a>
+        </div>
+      </div>
+    </div>
   );
 }
 
