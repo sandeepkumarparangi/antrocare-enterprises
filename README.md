@@ -74,3 +74,13 @@ GET /api/categories
 GET /api/summary
 PATCH /api/products/{id}               requires X-Admin-Key
 ```
+
+## Deploy On Render
+
+This repo includes a `Dockerfile` and `render.yaml` for a single public Render web service. The Docker build compiles the Vite frontend, copies it into Spring Boot static resources, builds the Java app, and serves the website plus API from one URL.
+
+1. Push this repository to GitHub.
+2. In Render, create a new Blueprint from the repository, or create a Web Service using Docker.
+3. Use the root `Dockerfile`.
+4. Render provides `PORT`; the app reads it automatically.
+5. Set `ANTROCARE_ADMIN_KEY` in Render to choose the admin passcode for the deployed site.

@@ -1,4 +1,6 @@
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8081";
+const DEFAULT_API_BASE = import.meta.env.DEV ? "http://localhost:8081" : "";
+
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE).replace(/\/$/, "");
 const ASSET_VERSION = "20260529";
 
 export function mediaUrl(path) {

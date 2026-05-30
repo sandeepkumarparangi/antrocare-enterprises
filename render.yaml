@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: antrocare-enterprises
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/summary
+    envVars:
+      - key: ANTROCARE_ADMIN_KEY
+        sync: false
+      - key: H2_CONSOLE_ENABLED
+        value: false
+      - key: STATIC_CACHE_PERIOD
+        value: 3600
