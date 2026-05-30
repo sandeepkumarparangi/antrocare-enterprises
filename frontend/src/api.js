@@ -1,4 +1,16 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8081";
+const DEFAULT_API_BASE = import.meta.env.DEV ? "http://localhost:8081" : "";
+
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE).replace(/\/$/, "");
+const ASSET_VERSION = "20260529";
+
+export function mediaUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const separator = normalizedPath.includes("?") ? "&" : "?";
+  return `${API_BASE}${normalizedPath}${separator}v=${ASSET_VERSION}`;
+}
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
