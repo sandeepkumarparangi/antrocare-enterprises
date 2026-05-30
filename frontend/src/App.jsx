@@ -255,10 +255,10 @@ function Hero({ summary }) {
             Modern medical product catalog
           </div>
           <h1 className="mt-5 max-w-3xl text-5xl font-black leading-[.95] tracking-tight text-ink md:text-7xl">
-            Care products arranged for fast, confident selection.
+            Clinical support, simplified for modern care.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-            Browse the complete Antrocare brochure as a searchable product application with product photos, source pages, and admin-managed cost visibility.
+            Explore Antrocare's orthopaedic, compression, and rehabilitation range through a clean digital catalog built for quick discovery, clear visuals, and quote-ready decisions.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a className="btn-primary" href="#products">
