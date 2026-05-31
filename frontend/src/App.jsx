@@ -86,7 +86,7 @@ function App() {
     const normalizedQuery = query.trim().toLowerCase();
     return products.filter((product) => {
       const categoryMatch = selectedCategory === "All" || product.category === selectedCategory;
-      const textMatch = !normalizedQuery || `${product.name} ${product.category}`.toLowerCase().includes(normalizedQuery);
+      const textMatch = !normalizedQuery || `${product.name} ${product.category} ${product.useDescription || ""}`.toLowerCase().includes(normalizedQuery);
       const statusMatch = isAdmin || product.status === "Active";
       return categoryMatch && textMatch && statusMatch;
     });
@@ -364,6 +364,9 @@ function ProductCard({ product, onPreview }) {
       <div className="p-5">
         <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
         <h3 className="mt-4 min-h-14 text-xl font-black leading-tight">{product.name}</h3>
+        {product.useDescription ? (
+          <p className="mt-3 min-h-12 text-sm font-semibold leading-6 text-slate-600">{product.useDescription}</p>
+        ) : null}
         <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
           <span className="text-xs font-black uppercase text-slate-500">Cost</span>
           <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
@@ -551,6 +554,7 @@ function ImagePreviewModal({ product, onClose }) {
           <div>
             <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
             <h2 className="mt-3 text-2xl font-black leading-tight text-ink">{product.name}</h2>
+            {product.useDescription ? <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600">{product.useDescription}</p> : null}
           </div>
           <button className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-ink" onClick={onClose} type="button" aria-label="Close image preview">
             <X size={22} />

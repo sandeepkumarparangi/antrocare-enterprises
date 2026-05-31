@@ -23,6 +23,9 @@ public class Product {
     @NotBlank
     private String status;
 
+    @Column(length = 220)
+    private String useDescription;
+
     private int brochurePage;
 
     @Column(length = 500)
@@ -34,12 +37,13 @@ public class Product {
     protected Product() {
     }
 
-    public Product(String id, String name, String category, String cost, String status, int brochurePage, String imageUrl, String brochureUrl) {
+    public Product(String id, String name, String category, String cost, String status, String useDescription, int brochurePage, String imageUrl, String brochureUrl) {
         this.id = id;
         this.name = name;
         this.category = category;
         this.cost = cost;
         this.status = status;
+        this.useDescription = useDescription;
         this.brochurePage = brochurePage;
         this.imageUrl = imageUrl;
         this.brochureUrl = brochureUrl;
@@ -63,6 +67,10 @@ public class Product {
 
     public String getStatus() {
         return status;
+    }
+
+    public String getUseDescription() {
+        return useDescription;
     }
 
     public int getBrochurePage() {

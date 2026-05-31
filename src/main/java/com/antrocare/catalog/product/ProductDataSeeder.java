@@ -193,6 +193,7 @@ public class ProductDataSeeder implements CommandLineRunner {
             category,
             DEFAULT_COST,
             "Active",
+            ProductUseDescriptions.forProduct(name),
             productPage,
             "/assets/products/" + id + ".jpg",
             "/rendered/page-" + pageNumber + ".png"
