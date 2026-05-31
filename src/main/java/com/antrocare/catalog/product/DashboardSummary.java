@@ -4,6 +4,7 @@ public record DashboardSummary(
     long totalProducts,
     long activeProducts,
     long pricedProducts,
-    long categories
+    long categories,
+    long purchaseRequests
 ) {
 }
