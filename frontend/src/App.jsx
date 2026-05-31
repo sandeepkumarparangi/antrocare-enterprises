@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -11,24 +11,38 @@ import {
   Mail,
   MapPin,
   Maximize2,
+  PackageCheck,
   Phone,
   Search,
+  Send,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Stethoscope,
   Store,
+  ShoppingCart,
   X
 } from "lucide-react";
-import { fetchCategories, fetchProducts, fetchSummary, mediaUrl, updateProduct } from "./api";
+import { createPurchaseRequest, fetchCategories, fetchProducts, fetchPurchaseRequests, fetchSummary, mediaUrl, updateProduct } from "./api";
 
 const ADMIN_SESSION_KEY = "antrocare-admin-key";
 const DEFAULT_COST = "Price on request";
 
+function createEmptyPurchaseDraft() {
+  return {
+    buyerName: "",
+    buyerPhone: "",
+    buyerEmail: "",
+    quantity: 1,
+    notes: ""
+  };
+}
+
 function App() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [summary, setSummary] = useState({ totalProducts: 0, activeProducts: 0, pricedProducts: 0, categories: 0 });
+  const [summary, setSummary] = useState({ totalProducts: 0, activeProducts: 0, pricedProducts: 0, categories: 0, purchaseRequests: 0 });
+  const [purchaseRequests, setPurchaseRequests] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [view, setView] = useState("catalog");
@@ -36,6 +50,10 @@ function App() {
   const [adminDraftKey, setAdminDraftKey] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [previewProduct, setPreviewProduct] = useState(null);
+  const [buyingProduct, setBuyingProduct] = useState(null);
+  const [purchaseDraft, setPurchaseDraft] = useState(createEmptyPurchaseDraft);
+  const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const isAdmin = Boolean(adminKey);
@@ -45,7 +63,7 @@ function App() {
   }, [adminKey]);
 
   useEffect(() => {
-    if (!previewProduct) return undefined;
+    if (!previewProduct && !buyingProduct) return undefined;
 
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -53,6 +71,7 @@ function App() {
     function handleEscape(event) {
       if (event.key === "Escape") {
         setPreviewProduct(null);
+        setBuyingProduct(null);
       }
     }
 
@@ -61,19 +80,21 @@ function App() {
       document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [previewProduct]);
+  }, [previewProduct, buyingProduct]);
 
   async function loadCatalog(key = "") {
     setLoading(true);
     try {
-      const [productData, categoryData, summaryData] = await Promise.all([
+      const [productData, categoryData, summaryData, purchaseRequestData] = await Promise.all([
         fetchProducts(key),
         fetchCategories(),
-        fetchSummary()
+        fetchSummary(),
+        key ? fetchPurchaseRequests(key) : Promise.resolve([])
       ]);
       setProducts(productData);
       setCategories(["All", ...categoryData]);
       setSummary(summaryData);
+      setPurchaseRequests(purchaseRequestData);
       setStatusMessage("");
     } catch (error) {
       setStatusMessage("Could not load catalog. Make sure the Spring Boot server is running on port 8081.");
@@ -86,7 +107,7 @@ function App() {
     const normalizedQuery = query.trim().toLowerCase();
     return products.filter((product) => {
       const categoryMatch = selectedCategory === "All" || product.category === selectedCategory;
-      const textMatch = !normalizedQuery || `${product.name} ${product.category}`.toLowerCase().includes(normalizedQuery);
+      const textMatch = !normalizedQuery || `${product.name} ${product.category} ${product.useDescription || ""}`.toLowerCase().includes(normalizedQuery);
       const statusMatch = isAdmin || product.status === "Active";
       return categoryMatch && textMatch && statusMatch;
     });
@@ -108,14 +129,16 @@ function App() {
     setLoading(true);
 
     try {
-      const [productData, categoryData, summaryData] = await Promise.all([
+      const [productData, categoryData, summaryData, purchaseRequestData] = await Promise.all([
         fetchProducts(key),
         fetchCategories(),
-        fetchSummary()
+        fetchSummary(),
+        fetchPurchaseRequests(key)
       ]);
       setProducts(productData);
       setCategories(["All", ...categoryData]);
       setSummary(summaryData);
+      setPurchaseRequests(purchaseRequestData);
       sessionStorage.setItem(ADMIN_SESSION_KEY, key);
       setAdminKey(key);
       setAdminDraftKey("");
@@ -133,6 +156,7 @@ function App() {
   function signOut() {
     sessionStorage.removeItem(ADMIN_SESSION_KEY);
     setAdminKey("");
+    setPurchaseRequests([]);
     setView("catalog");
   }
 
@@ -151,9 +175,54 @@ function App() {
     }
   }
 
+  function openPurchaseModal(product) {
+    setBuyingProduct(product);
+    setPurchaseDraft(createEmptyPurchaseDraft());
+  }
+
+  function updatePurchaseDraft(field, value) {
+    setPurchaseDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submitPurchaseRequest(event) {
+    event.preventDefault();
+    if (!buyingProduct || purchaseSubmitting) return;
+
+    const quantity = Math.max(1, Number(purchaseDraft.quantity) || 1);
+    const request = {
+      productId: buyingProduct.id,
+      buyerName: purchaseDraft.buyerName.trim(),
+      buyerPhone: purchaseDraft.buyerPhone.trim(),
+      buyerEmail: purchaseDraft.buyerEmail.trim(),
+      quantity,
+      notes: purchaseDraft.notes.trim()
+    };
+
+    if (!request.buyerName || !request.buyerPhone) {
+      setStatusMessage("Name and phone are required for buying.");
+      return;
+    }
+
+    setPurchaseSubmitting(true);
+    try {
+      const saved = await createPurchaseRequest(request);
+      setBuyingProduct(null);
+      setPurchaseDraft(createEmptyPurchaseDraft());
+      setSummary(await fetchSummary());
+      if (adminKey) {
+        setPurchaseRequests(await fetchPurchaseRequests(adminKey));
+      }
+      setStatusMessage(`Buy request saved for ${saved.productName}.`);
+    } catch (error) {
+      setStatusMessage("Buy request failed. Please check the details and try again.");
+    } finally {
+      setPurchaseSubmitting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-mist text-ink">
-      <Header view={view} setView={setView} isAdmin={isAdmin} />
+      <Header view={view} setView={setView} isAdmin={isAdmin} onHeightChange={setHeaderHeight} />
 
       {view === "catalog" ? (
         <CatalogPage
@@ -167,6 +236,8 @@ function App() {
           summary={summary}
           loading={loading}
           onPreview={setPreviewProduct}
+          onBuy={openPurchaseModal}
+          headerHeight={headerHeight}
         />
       ) : (
         <AdminPage
@@ -184,19 +255,50 @@ function App() {
           onLocalChange={updateLocalProduct}
           onSave={saveProduct}
           summary={summary}
+          purchaseRequests={purchaseRequests}
         />
       )}
 
       {statusMessage ? <Toast message={statusMessage} onClose={() => setStatusMessage("")} /> : null}
-      {previewProduct ? <ImagePreviewModal product={previewProduct} onClose={() => setPreviewProduct(null)} /> : null}
+      {previewProduct ? <ImagePreviewModal product={previewProduct} onClose={() => setPreviewProduct(null)} onBuy={openPurchaseModal} /> : null}
+      {buyingProduct ? (
+        <PurchaseModal
+          product={buyingProduct}
+          draft={purchaseDraft}
+          onChange={updatePurchaseDraft}
+          onClose={() => setBuyingProduct(null)}
+          onSubmit={submitPurchaseRequest}
+          submitting={purchaseSubmitting}
+        />
+      ) : null}
       <ContactSection />
     </div>
   );
 }
 
-function Header({ view, setView, isAdmin }) {
+function Header({ view, setView, isAdmin, onHeightChange }) {
+  const headerRef = useRef(null);
+
+  useEffect(() => {
+    if (!headerRef.current) return undefined;
+
+    const updateHeight = () => {
+      onHeightChange(Math.ceil(headerRef.current.getBoundingClientRect().height));
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(headerRef.current);
+    window.addEventListener("resize", updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [onHeightChange]);
+
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 px-4 py-3 backdrop-blur-xl lg:px-10">
+    <header ref={headerRef} className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 px-4 py-3 backdrop-blur-xl lg:px-10">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <button className="flex items-center gap-3 text-left" onClick={() => setView("catalog")}>
           <span className="grid h-12 w-12 place-items-center rounded-lg bg-gradient-to-br from-clinical to-ocean font-black text-white shadow-soft">
@@ -235,7 +337,7 @@ function CatalogPage(props) {
     <main>
       <Hero summary={props.summary} />
       <CatalogControls {...props} />
-      <ProductGrid products={props.products} loading={props.loading} onPreview={props.onPreview} />
+      <ProductGrid products={props.products} loading={props.loading} onPreview={props.onPreview} onBuy={props.onBuy} />
       <BrochureStrip />
     </main>
   );
@@ -255,10 +357,10 @@ function Hero({ summary }) {
             Modern medical product catalog
           </div>
           <h1 className="mt-5 max-w-3xl text-5xl font-black leading-[.95] tracking-tight text-ink md:text-7xl">
-            Care products arranged for fast, confident selection.
+            Clinical support, simplified for modern care.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-            Browse the complete Antrocare brochure as a searchable product application with product photos, source pages, and admin-managed cost visibility.
+            Explore Antrocare's orthopaedic, compression, and rehabilitation range through a clean digital catalog built for quick discovery, clear visuals, and quote-ready decisions.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a className="btn-primary" href="#products">
@@ -296,51 +398,57 @@ function Metric({ icon: Icon, label, value }) {
   );
 }
 
-function CatalogControls({ categories, categoryCounts, selectedCategory, setSelectedCategory, query, setQuery, products }) {
+function CatalogControls({ categories, categoryCounts, selectedCategory, setSelectedCategory, query, setQuery, products, headerHeight }) {
   return (
-    <section id="products" className="mx-auto max-w-7xl px-4 py-12 lg:px-10">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="eyebrow">Product catalog</p>
-          <h2 className="section-title">Search by treatment area, support type, or name.</h2>
+    <section
+      id="products"
+      className="sticky z-30 border-b border-slate-200/80 bg-mist/95 px-4 py-4 shadow-sm backdrop-blur-xl lg:px-10"
+      style={{ top: headerHeight, scrollMarginTop: headerHeight + 16 }}
+    >
+      <div className="mx-auto max-w-7xl">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] lg:items-center">
+          <div className="min-w-0">
+            <p className="eyebrow">Product catalog</p>
+            <h2 className="mt-1 text-xl font-black leading-tight tracking-tight md:text-2xl">Search by treatment area, support type, or name.</h2>
+          </div>
+          <label className="relative block w-full">
+            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+            <input className="field pl-12" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search product or category" />
+          </label>
         </div>
-        <label className="relative block w-full max-w-md">
-          <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-          <input className="field pl-12" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search product or category" />
-        </label>
-      </div>
 
-      <div className="mt-7 flex gap-3 overflow-x-auto pb-3">
-        {categories.map((category) => (
-          <button
-            className={`category-chip ${selectedCategory === category ? "category-chip-active" : ""}`}
-            key={category}
-            onClick={() => setSelectedCategory(category)}
-            type="button"
-          >
-            {category}
-            <span>{category === "All" ? products.length : categoryCounts[category] || 0}</span>
-          </button>
-        ))}
+        <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+          {categories.map((category) => (
+            <button
+              className={`category-chip ${selectedCategory === category ? "category-chip-active" : ""}`}
+              key={category}
+              onClick={() => setSelectedCategory(category)}
+              type="button"
+            >
+              {category}
+              <span>{category === "All" ? products.length : categoryCounts[category] || 0}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );
 }
 
-function ProductGrid({ products, loading, onPreview }) {
+function ProductGrid({ products, loading, onPreview, onBuy }) {
   if (loading) {
-    return <div className="mx-auto max-w-7xl px-4 pb-16 lg:px-10"><div className="empty-panel">Loading catalog...</div></div>;
+    return <div className="mx-auto max-w-7xl px-4 py-8 pb-16 lg:px-10"><div className="empty-panel">Loading catalog...</div></div>;
   }
 
   return (
-    <section className="mx-auto max-w-7xl px-4 pb-16 lg:px-10">
+    <section className="mx-auto max-w-7xl px-4 py-8 pb-16 lg:px-10">
       <div className="mb-5 flex items-center justify-between gap-4 text-sm font-black text-slate-500">
         <span>{products.length} products shown</span>
         <span className="hidden items-center gap-2 md:flex"><SlidersHorizontal size={17} /> Sorted by category</span>
       </div>
       {products.length ? (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {products.map((product) => <ProductCard key={product.id} product={product} onPreview={onPreview} />)}
+          {products.map((product) => <ProductCard key={product.id} product={product} onPreview={onPreview} onBuy={onBuy} />)}
         </div>
       ) : (
         <div className="empty-panel">No products match the current filters.</div>
@@ -349,7 +457,7 @@ function ProductGrid({ products, loading, onPreview }) {
   );
 }
 
-function ProductCard({ product, onPreview }) {
+function ProductCard({ product, onPreview, onBuy }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
 
@@ -364,6 +472,9 @@ function ProductCard({ product, onPreview }) {
       <div className="p-5">
         <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
         <h3 className="mt-4 min-h-14 text-xl font-black leading-tight">{product.name}</h3>
+        {product.useDescription ? (
+          <p className="mt-3 min-h-12 text-sm font-semibold leading-6 text-slate-600">{product.useDescription}</p>
+        ) : null}
         <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
           <span className="text-xs font-black uppercase text-slate-500">Cost</span>
           <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
@@ -372,6 +483,10 @@ function ProductCard({ product, onPreview }) {
           Brochure page {product.brochurePage}
           <ArrowUpRight size={15} />
         </a>
+        <button className="btn-primary mt-4 w-full min-h-11" type="button" onClick={() => onBuy(product)}>
+          <ShoppingCart size={18} />
+          Buy
+        </button>
       </div>
     </article>
   );
@@ -402,6 +517,14 @@ function ProductThumbnail({ product }) {
   );
 }
 
+function formatRequestTime(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
+}
+
 function AdminPage(props) {
   if (!props.isAdmin) {
     return <AdminLogin {...props} />;
@@ -414,13 +537,14 @@ function AdminPage(props) {
           <p className="eyebrow text-emerald-200">Admin console</p>
           <h1 className="max-w-3xl text-4xl font-black leading-tight md:text-6xl">Manage pricing, visibility, and catalog freshness.</h1>
           <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-300">
-            Update costs from the in-memory H2 database, hide unavailable products, and keep the public catalog clean.
+            Update costs, hide unavailable products, and review buy requests saved in the database.
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
           <Metric icon={Boxes} label="Products" value={props.summary.totalProducts} />
           <Metric icon={BadgeIndianRupee} label="Priced" value={props.summary.pricedProducts} />
           <Metric icon={Activity} label="Active" value={props.summary.activeProducts} />
+          <Metric icon={PackageCheck} label="Buy requests" value={props.summary.purchaseRequests} />
         </div>
       </section>
 
@@ -480,6 +604,56 @@ function AdminPage(props) {
           </table>
         </div>
       </section>
+
+      <section className="mt-8 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="eyebrow">Buy requests</p>
+            <h2 className="mt-1 text-2xl font-black">Customer requests saved in the database.</h2>
+          </div>
+          <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-black text-clinical">{props.purchaseRequests.length} total</span>
+        </div>
+
+        <div className="mt-5 overflow-auto">
+          {props.purchaseRequests.length ? (
+            <table className="w-full min-w-[980px] border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                  <th className="table-cell">Request</th>
+                  <th className="table-cell">Product</th>
+                  <th className="table-cell">Buyer</th>
+                  <th className="table-cell">Contact</th>
+                  <th className="table-cell">Qty</th>
+                  <th className="table-cell">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {props.purchaseRequests.map((request) => (
+                  <tr className="border-t border-slate-100" key={request.id}>
+                    <td className="table-cell font-bold text-slate-500">{formatRequestTime(request.createdAt)}</td>
+                    <td className="table-cell">
+                      <div className="font-black">{request.productName}</div>
+                      <div className="mt-1 text-sm font-bold text-slate-500">{request.productCategory} - {request.costSnapshot}</div>
+                      {request.notes ? <div className="mt-2 max-w-md text-sm font-semibold text-slate-500">{request.notes}</div> : null}
+                    </td>
+                    <td className="table-cell font-black">{request.buyerName}</td>
+                    <td className="table-cell">
+                      <div className="font-bold">{request.buyerPhone}</div>
+                      {request.buyerEmail ? <div className="mt-1 text-sm font-semibold text-slate-500">{request.buyerEmail}</div> : null}
+                    </td>
+                    <td className="table-cell font-black">{request.quantity}</td>
+                    <td className="table-cell">
+                      <span className="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-black uppercase text-amber-700">{request.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-panel">No buy requests yet.</div>
+          )}
+        </div>
+      </section>
     </main>
   );
 }
@@ -530,7 +704,7 @@ function BrochureStrip() {
   );
 }
 
-function ImagePreviewModal({ product, onClose }) {
+function ImagePreviewModal({ product, onClose, onBuy }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
 
@@ -551,6 +725,7 @@ function ImagePreviewModal({ product, onClose }) {
           <div>
             <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
             <h2 className="mt-3 text-2xl font-black leading-tight text-ink">{product.name}</h2>
+            {product.useDescription ? <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600">{product.useDescription}</p> : null}
           </div>
           <button className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-ink" onClick={onClose} type="button" aria-label="Close image preview">
             <X size={22} />
@@ -561,12 +736,85 @@ function ImagePreviewModal({ product, onClose }) {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4">
           <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
-          <a className="btn-secondary min-h-11" href={brochureSrc} target="_blank" rel="noreferrer">
-            <ArrowUpRight size={18} />
-            Brochure page {product.brochurePage}
-          </a>
+          <div className="flex flex-wrap gap-3">
+            <button
+              className="btn-primary min-h-11"
+              type="button"
+              onClick={() => {
+                onBuy(product);
+                onClose();
+              }}
+            >
+              <ShoppingCart size={18} />
+              Buy
+            </button>
+            <a className="btn-secondary min-h-11" href={brochureSrc} target="_blank" rel="noreferrer">
+              <ArrowUpRight size={18} />
+              Brochure page {product.brochurePage}
+            </a>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PurchaseModal({ product, draft, onChange, onClose, onSubmit, submitting }) {
+  return (
+    <div
+      className="image-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Buy ${product.name}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <form className="w-full max-w-2xl overflow-hidden rounded-lg border border-white/20 bg-white shadow-2xl" onSubmit={onSubmit}>
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+          <div>
+            <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
+            <h2 className="mt-3 text-2xl font-black leading-tight text-ink">Buy {product.name}</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{product.cost}</p>
+          </div>
+          <button className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-ink" onClick={onClose} type="button" aria-label="Close buy form">
+            <X size={22} />
+          </button>
+        </div>
+
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-sm font-black text-slate-500">Name</span>
+            <input className="field" value={draft.buyerName} onChange={(event) => onChange("buyerName", event.target.value)} required />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-black text-slate-500">Phone</span>
+            <input className="field" value={draft.buyerPhone} onChange={(event) => onChange("buyerPhone", event.target.value)} required />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-black text-slate-500">Email</span>
+            <input className="field" type="email" value={draft.buyerEmail} onChange={(event) => onChange("buyerEmail", event.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-black text-slate-500">Quantity</span>
+            <input className="field" type="number" min="1" max="99" value={draft.quantity} onChange={(event) => onChange("quantity", event.target.value)} required />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-2 block text-sm font-black text-slate-500">Notes</span>
+            <textarea className="field min-h-28 resize-y py-3" value={draft.notes} onChange={(event) => onChange("notes", event.target.value)} />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-5">
+          <span className="text-sm font-bold text-slate-500">The request will be saved for admin review.</span>
+          <button className="btn-primary min-h-11" type="submit" disabled={submitting}>
+            <Send size={18} />
+            {submitting ? "Saving..." : "Send buy request"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -41,6 +41,17 @@ export function fetchSummary() {
   return request("/api/summary");
 }
 
+export function fetchPurchaseRequests(adminKey) {
+  return request("/api/purchase-requests", { adminKey });
+}
+
+export function createPurchaseRequest(purchaseRequest) {
+  return request("/api/purchase-requests", {
+    method: "POST",
+    body: purchaseRequest
+  });
+}
+
 export function updateProduct(product, adminKey) {
   return request(`/api/products/${product.id}`, {
     method: "PATCH",

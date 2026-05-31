@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,10 +25,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductController {
 
     private final ProductRepository productRepository;
+    private final PurchaseRequestRepository purchaseRequestRepository;
     private final String adminKey;
 
-    public ProductController(ProductRepository productRepository, @Value("${antrocare.admin-key}") String adminKey) {
+    public ProductController(
+        ProductRepository productRepository,
+        PurchaseRequestRepository purchaseRequestRepository,
+        @Value("${antrocare.admin-key}") String adminKey
+    ) {
         this.productRepository = productRepository;
+        this.purchaseRequestRepository = purchaseRequestRepository;
         this.adminKey = adminKey;
     }
 
@@ -66,7 +73,29 @@ public class ProductController {
         long active = products.stream().filter(product -> "Active".equals(product.getStatus())).count();
         long priced = products.stream().filter(product -> !"Price on request".equals(product.getCost())).count();
         long categories = products.stream().map(Product::getCategory).distinct().count();
-        return new DashboardSummary(products.size(), active, priced, categories);
+        long purchaseRequests = purchaseRequestRepository.count();
+        return new DashboardSummary(products.size(), active, priced, categories, purchaseRequests);
+    }
+
+    @PostMapping("/purchase-requests")
+    public ResponseEntity<PurchaseRequest> createPurchaseRequest(@Valid @RequestBody ProductPurchaseRequest request) {
+        return productRepository.findById(request.productId().trim())
+            .filter(product -> "Active".equals(product.getStatus()))
+            .map(product -> ResponseEntity.status(HttpStatus.CREATED).body(
+                purchaseRequestRepository.save(new PurchaseRequest(product, request))
+            ))
+            .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/purchase-requests")
+    public ResponseEntity<List<PurchaseRequest>> purchaseRequests(
+        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey
+    ) {
+        if (!isAdmin(providedAdminKey)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        return ResponseEntity.ok(purchaseRequestRepository.findAllByOrderByCreatedAtDesc());
     }
 
     @PatchMapping("/products/{id}")
