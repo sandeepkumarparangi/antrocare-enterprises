@@ -300,10 +300,7 @@ function Header({ view, setView, isAdmin, onHeightChange }) {
     <header ref={headerRef} className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 px-4 py-3 backdrop-blur-xl lg:px-10">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <button className="flex items-center gap-3 text-left" onClick={() => setView("catalog")}>
-          <span className="ace-logo-mark" aria-hidden="true">
-            <span className="ace-logo-frame" />
-            <span className="ace-logo-text">ACE</span>
-          </span>
+          <AceLogoMark />
           <span>
             <span className="block text-lg font-black">Antrocare Enterprises</span>
             <span className="block text-sm font-semibold text-slate-500">Orthopaedic, compression and rehab products</span>
@@ -320,6 +317,52 @@ function Header({ view, setView, isAdmin, onHeightChange }) {
         </nav>
       </div>
     </header>
+  );
+}
+
+function AceLogoMark() {
+  return (
+    <span className="ace-logo-mark" aria-hidden="true">
+      <svg className="ace-logo-svg" viewBox="0 0 100 100" focusable="false">
+        <defs>
+          <linearGradient id="aceLogoSky" x1="14" y1="6" x2="90" y2="96" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#36B6E3" />
+            <stop offset="1" stopColor="#14A6C6" />
+          </linearGradient>
+          <linearGradient id="aceLogoDisc" x1="25" y1="18" x2="75" y2="86" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#6B7072" />
+            <stop offset="1" stopColor="#4B5052" />
+          </linearGradient>
+        </defs>
+        <rect width="100" height="100" rx="18" fill="url(#aceLogoSky)" />
+        <circle cx="50" cy="50" r="42" fill="url(#aceLogoDisc)" stroke="#F8FAFC" strokeWidth="5" />
+        <circle cx="50" cy="50" r="37" fill="none" stroke="#DDE5E8" strokeWidth="1.6" opacity="0.9" />
+        <circle cx="50" cy="27" r="6.4" fill="#FFFFFF" />
+        <path
+          d="M50 34 C47 42 47 53 47.5 64 M50 34 C53 42 53 53 52.5 64"
+          fill="none"
+          stroke="#FFFFFF"
+          strokeLinecap="round"
+          strokeWidth="7"
+        />
+        <path
+          d="M50 38 C40 43 31 45 18 44 M50 38 C60 43 69 45 82 44 M49 37 C40 30 31 23 23 16 M51 37 C60 30 69 23 77 16"
+          fill="none"
+          stroke="#FFFFFF"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="5.6"
+        />
+        <path
+          d="M48 63 L40 86 M52 63 L60 86 M48 64 L31 83 M52 64 L69 83"
+          fill="none"
+          stroke="#FFFFFF"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="5.9"
+        />
+      </svg>
+    </span>
   );
 }
 
