@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
-  ArrowUpRight,
   BadgeIndianRupee,
   Boxes,
   CheckCircle2,
@@ -338,7 +337,6 @@ function CatalogPage(props) {
       <Hero summary={props.summary} />
       <CatalogControls {...props} />
       <ProductGrid products={props.products} loading={props.loading} onPreview={props.onPreview} onBuy={props.onBuy} />
-      <BrochureStrip />
     </main>
   );
 }
@@ -479,10 +477,6 @@ function ProductCard({ product, onPreview, onBuy }) {
           <span className="text-xs font-black uppercase text-slate-500">Cost</span>
           <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
         </div>
-        <a className="mt-3 inline-flex items-center gap-1.5 text-sm font-black text-ocean" href={brochureSrc} target="_blank" rel="noreferrer">
-          Brochure page {product.brochurePage}
-          <ArrowUpRight size={15} />
-        </a>
         <button className="btn-primary mt-4 w-full min-h-11" type="button" onClick={() => onBuy(product)}>
           <ShoppingCart size={18} />
           Buy
@@ -504,7 +498,6 @@ function ProductImage({ product, imageSrc, brochureSrc, full = false }) {
           event.currentTarget.src = brochureSrc;
         }}
       />
-      {!full ? <span className="product-page-badge">Page {product.brochurePage}</span> : null}
     </span>
   );
 }
@@ -681,29 +674,6 @@ function AdminLogin({ adminDraftKey, setAdminDraftKey, onLogin }) {
   );
 }
 
-function BrochureStrip() {
-  return (
-    <section className="bg-white px-4 py-12 lg:px-10">
-      <div className="mx-auto max-w-7xl">
-        <p className="eyebrow">Original brochure</p>
-        <h2 className="section-title">Source pages stay one click away.</h2>
-        <div className="mt-7 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {Array.from({ length: 12 }, (_, index) => {
-            const page = String(index + 1).padStart(2, "0");
-            const brochureSrc = mediaUrl(`/rendered/page-${page}.png`);
-            return (
-              <a className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-soft" href={brochureSrc} key={page} target="_blank" rel="noreferrer">
-                <img className="aspect-[.76] w-full object-cover" src={brochureSrc} alt={`Brochure page ${index + 1}`} />
-                <span className="block px-3 py-2 text-sm font-black text-slate-500">Page {index + 1}</span>
-              </a>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function ImagePreviewModal({ product, onClose, onBuy }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
@@ -748,10 +718,6 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
               <ShoppingCart size={18} />
               Buy
             </button>
-            <a className="btn-secondary min-h-11" href={brochureSrc} target="_blank" rel="noreferrer">
-              <ArrowUpRight size={18} />
-              Brochure page {product.brochurePage}
-            </a>
           </div>
         </div>
       </div>
