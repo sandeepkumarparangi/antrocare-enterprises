@@ -300,8 +300,9 @@ function Header({ view, setView, isAdmin, onHeightChange }) {
     <header ref={headerRef} className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 px-4 py-3 backdrop-blur-xl lg:px-10">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <button className="flex items-center gap-3 text-left" onClick={() => setView("catalog")}>
-          <span className="grid h-12 w-12 place-items-center rounded-lg bg-gradient-to-br from-clinical to-ocean font-black text-white shadow-soft">
-            ACE
+          <span className="ace-logo-mark" aria-hidden="true">
+            <span className="ace-logo-frame" />
+            <span className="ace-logo-text">ACE</span>
           </span>
           <span>
             <span className="block text-lg font-black">Antrocare Enterprises</span>

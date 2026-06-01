@@ -29,6 +29,32 @@
     @apply bg-emerald-50 text-clinical;
   }
 
+  .ace-logo-mark {
+    @apply relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-emerald-200 bg-white text-clinical shadow-soft;
+  }
+
+  .ace-logo-mark::before {
+    @apply absolute inset-0;
+    content: "";
+    background:
+      linear-gradient(135deg, rgba(12, 168, 130, 0.2), rgba(21, 104, 154, 0.12)),
+      radial-gradient(circle at 74% 22%, rgba(255, 124, 89, 0.22), transparent 28%);
+  }
+
+  .ace-logo-mark::after {
+    @apply absolute bottom-2 right-2 h-2.5 w-2.5 rounded-full bg-coral shadow-sm;
+    content: "";
+  }
+
+  .ace-logo-frame {
+    @apply absolute inset-2 rounded-md border-2 border-clinical/40;
+    transform: rotate(10deg);
+  }
+
+  .ace-logo-text {
+    @apply relative text-base font-black text-slate-950;
+  }
+
   .btn-primary {
     @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-clinical to-ocean px-5 font-black text-white shadow-lg shadow-emerald-900/10 transition hover:-translate-y-0.5 hover:shadow-xl;
   }
