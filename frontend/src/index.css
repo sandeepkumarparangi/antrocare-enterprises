@@ -30,11 +30,11 @@
   }
 
   .ace-logo-mark {
-    @apply grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-sky-400 p-1 shadow-soft ring-1 ring-sky-100;
+    @apply grid h-14 w-14 shrink-0 place-items-center overflow-hidden;
   }
 
-  .ace-logo-svg {
-    @apply h-full w-full drop-shadow-sm;
+  .ace-logo-image {
+    @apply h-full w-full object-contain;
   }
 
   .btn-primary {
