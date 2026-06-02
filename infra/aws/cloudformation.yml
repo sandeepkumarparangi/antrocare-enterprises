@@ -38,6 +38,9 @@ Parameters:
   AdminKeyParameterName:
     Type: String
     NoEcho: true
+  AdminEmail:
+    Type: String
+    Default: sandeepkumarparangi97@gmail.com
   VpcCidr:
     Type: String
     Default: 10.42.0.0/16
@@ -318,6 +321,9 @@ Resources:
           DATABASE_USERNAME=${DbUsername}
           DATABASE_PASSWORD=$DB_PASSWORD
           ANTROCARE_ADMIN_KEY=$ADMIN_KEY
+          ANTROCARE_ADMIN_EMAIL=${AdminEmail}
+          ANTROCARE_LOW_STOCK_THRESHOLD=5
+          ANTROCARE_MAIL_ALERTS_ENABLED=false
           JAVA_OPTS=-XX:MaxRAMPercentage=70 -Djava.security.egd=file:/dev/./urandom
           STATIC_CACHE_PERIOD=86400
           ENVEOF

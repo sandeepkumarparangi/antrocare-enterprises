@@ -11,7 +11,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class ProductDataSeeder implements CommandLineRunner {
 
-    private static final String DEFAULT_COST = "Price on request";
+    private static final String DEFAULT_COST = "₹50";
+    private static final int DEFAULT_STOCK = 50;
 
     private final ProductRepository productRepository;
 
@@ -22,6 +23,10 @@ public class ProductDataSeeder implements CommandLineRunner {
     @Override
     public void run(String... args) {
         if (productRepository.count() > 0) {
+            productRepository.findAll().forEach(product -> {
+                product.resetForExistingCatalog(DEFAULT_COST, DEFAULT_STOCK);
+                productRepository.save(product);
+            });
             return;
         }
 

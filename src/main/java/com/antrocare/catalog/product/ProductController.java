@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import jakarta.validation.Valid;
+import jakarta.transaction.Transactional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -26,15 +27,18 @@ public class ProductController {
 
     private final ProductRepository productRepository;
     private final PurchaseRequestRepository purchaseRequestRepository;
+    private final LowStockAlertService lowStockAlertService;
     private final String adminKey;
 
     public ProductController(
         ProductRepository productRepository,
         PurchaseRequestRepository purchaseRequestRepository,
+        LowStockAlertService lowStockAlertService,
         @Value("${antrocare.admin-key}") String adminKey
     ) {
         this.productRepository = productRepository;
         this.purchaseRequestRepository = purchaseRequestRepository;
+        this.lowStockAlertService = lowStockAlertService;
         this.adminKey = adminKey;
     }
 
@@ -74,16 +78,40 @@ public class ProductController {
         long priced = products.stream().filter(product -> !"Price on request".equals(product.getCost())).count();
         long categories = products.stream().map(Product::getCategory).distinct().count();
         long purchaseRequests = purchaseRequestRepository.count();
-        return new DashboardSummary(products.size(), active, priced, categories, purchaseRequests);
+        long totalUnitsSold = products.stream().mapToLong(Product::getUnitsSold).sum();
+        long lowStockProducts = products.stream().filter(product -> product.isLowStock(lowStockAlertService.threshold())).count();
+        return new DashboardSummary(products.size(), active, priced, categories, purchaseRequests, totalUnitsSold, lowStockProducts);
+    }
+
+    @GetMapping("/stock-alerts")
+    public ResponseEntity<List<Product>> stockAlerts(
+        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey
+    ) {
+        if (!isAdmin(providedAdminKey)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        return ResponseEntity.ok(productRepository.findByStockQuantityGreaterThanAndStockQuantityLessThanOrderByStockQuantityAscNameAsc(0, lowStockAlertService.threshold()));
     }
 
     @PostMapping("/purchase-requests")
+    @Transactional
     public ResponseEntity<PurchaseRequest> createPurchaseRequest(@Valid @RequestBody ProductPurchaseRequest request) {
         return productRepository.findById(request.productId().trim())
             .filter(product -> "Active".equals(product.getStatus()))
-            .map(product -> ResponseEntity.status(HttpStatus.CREATED).body(
-                purchaseRequestRepository.save(new PurchaseRequest(product, request))
-            ))
+            .map(product -> {
+                if (request.quantity() > product.getStockQuantity()) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT).<PurchaseRequest>build();
+                }
+
+                PurchaseRequest saved = purchaseRequestRepository.save(new PurchaseRequest(product, request));
+                product.recordSale(request.quantity());
+                if (lowStockAlertService.notifyIfNeeded(product)) {
+                    product.markLowStockAlertSent();
+                }
+                productRepository.save(product);
+                return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            })
             .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -110,7 +138,10 @@ public class ProductController {
 
         return productRepository.findById(id)
             .map(product -> {
-                product.update(request.cost().trim(), request.status().trim());
+                product.update(request.cost().trim(), request.status().trim(), request.stockQuantity());
+                if (lowStockAlertService.notifyIfNeeded(product)) {
+                    product.markLowStockAlertSent();
+                }
                 return ResponseEntity.ok(productRepository.save(product));
             })
             .orElseGet(() -> ResponseEntity.notFound().build());

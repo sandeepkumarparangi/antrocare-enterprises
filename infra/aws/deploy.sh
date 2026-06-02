@@ -10,6 +10,7 @@ ENVIRONMENT_NAME="${ENVIRONMENT_NAME:-prod}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t3.micro}"
 BUDGET_AMOUNT="${BUDGET_AMOUNT:-5}"
 BUDGET_EMAIL="${BUDGET_EMAIL:-}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-${BUDGET_EMAIL:-sandeepkumarparangi97@gmail.com}}"
 DB_PASSWORD_PARAMETER="/${PROJECT_NAME}/${ENVIRONMENT_NAME}/db-password"
 ADMIN_KEY_PARAMETER="/${PROJECT_NAME}/${ENVIRONMENT_NAME}/admin-key"
 SECRETS_DIR="$AWS_DIR/.secrets"
@@ -201,7 +202,8 @@ aws cloudformation deploy \
     AppArtifactBucket="$ARTIFACT_BUCKET" \
     AppArtifactKey="$ARTIFACT_KEY" \
     DbPasswordParameterName="$DB_PASSWORD_PARAMETER" \
-    AdminKeyParameterName="$ADMIN_KEY_PARAMETER"
+    AdminKeyParameterName="$ADMIN_KEY_PARAMETER" \
+    AdminEmail="$ADMIN_EMAIL"
 
 echo
 echo "Deployment outputs:"

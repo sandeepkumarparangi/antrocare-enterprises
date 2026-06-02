@@ -24,8 +24,11 @@ AWS_REGION=us-east-1 BUDGET_AMOUNT=5 BUDGET_EMAIL=you@example.com ./infra/aws/de
 ```
 
 If `BUDGET_EMAIL` is omitted, the deployment still works but budget email notifications are skipped.
+`ADMIN_EMAIL` defaults to `BUDGET_EMAIL` and is passed to the app for inventory alerts.
 
 After deployment, use the `ApiGatewayUrl` output for the global URL. The direct ALB URL is also shown, but without a domain name the API Gateway URL is the HTTPS entry point.
+
+Low-stock alerts are always shown in the admin dashboard. Email sending is disabled by default until SMTP settings are configured for the Spring Boot app.
 
 ## Admin Key
 

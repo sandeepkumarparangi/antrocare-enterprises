@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  AlertTriangle,
   BadgeIndianRupee,
   Boxes,
   CheckCircle2,
@@ -20,12 +21,13 @@ import {
   Stethoscope,
   Store,
   ShoppingCart,
+  TrendingUp,
   X
 } from "lucide-react";
-import { createPurchaseRequest, fetchCategories, fetchProducts, fetchPurchaseRequests, fetchSummary, mediaUrl, updateProduct } from "./api";
+import { createPurchaseRequest, fetchCategories, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, mediaUrl, updateProduct } from "./api";
 
 const ADMIN_SESSION_KEY = "antrocare-admin-key";
-const DEFAULT_COST = "Price on request";
+const DEFAULT_COST = "₹50";
 
 function createEmptyPurchaseDraft() {
   return {
@@ -40,8 +42,9 @@ function createEmptyPurchaseDraft() {
 function App() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [summary, setSummary] = useState({ totalProducts: 0, activeProducts: 0, pricedProducts: 0, categories: 0, purchaseRequests: 0 });
+  const [summary, setSummary] = useState({ totalProducts: 0, activeProducts: 0, pricedProducts: 0, categories: 0, purchaseRequests: 0, totalUnitsSold: 0, lowStockProducts: 0 });
   const [purchaseRequests, setPurchaseRequests] = useState([]);
+  const [stockAlerts, setStockAlerts] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [view, setView] = useState("catalog");
@@ -84,16 +87,18 @@ function App() {
   async function loadCatalog(key = "") {
     setLoading(true);
     try {
-      const [productData, categoryData, summaryData, purchaseRequestData] = await Promise.all([
+      const [productData, categoryData, summaryData, purchaseRequestData, stockAlertData] = await Promise.all([
         fetchProducts(key),
         fetchCategories(),
         fetchSummary(),
-        key ? fetchPurchaseRequests(key) : Promise.resolve([])
+        key ? fetchPurchaseRequests(key) : Promise.resolve([]),
+        key ? fetchStockAlerts(key) : Promise.resolve([])
       ]);
       setProducts(productData);
       setCategories(["All", ...categoryData]);
       setSummary(summaryData);
       setPurchaseRequests(purchaseRequestData);
+      setStockAlerts(stockAlertData);
       setStatusMessage("");
     } catch (error) {
       setStatusMessage("Could not load catalog. Make sure the Spring Boot server is running on port 8081.");
@@ -128,16 +133,18 @@ function App() {
     setLoading(true);
 
     try {
-      const [productData, categoryData, summaryData, purchaseRequestData] = await Promise.all([
+      const [productData, categoryData, summaryData, purchaseRequestData, stockAlertData] = await Promise.all([
         fetchProducts(key),
         fetchCategories(),
         fetchSummary(),
-        fetchPurchaseRequests(key)
+        fetchPurchaseRequests(key),
+        fetchStockAlerts(key)
       ]);
       setProducts(productData);
       setCategories(["All", ...categoryData]);
       setSummary(summaryData);
       setPurchaseRequests(purchaseRequestData);
+      setStockAlerts(stockAlertData);
       sessionStorage.setItem(ADMIN_SESSION_KEY, key);
       setAdminKey(key);
       setAdminDraftKey("");
@@ -156,6 +163,7 @@ function App() {
     sessionStorage.removeItem(ADMIN_SESSION_KEY);
     setAdminKey("");
     setPurchaseRequests([]);
+    setStockAlerts([]);
     setView("catalog");
   }
 
@@ -168,6 +176,7 @@ function App() {
       const updated = await updateProduct(product, adminKey);
       setProducts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setSummary(await fetchSummary());
+      setStockAlerts(await fetchStockAlerts(adminKey));
       setStatusMessage(`${updated.name} updated.`);
     } catch (error) {
       setStatusMessage("Admin update failed. Check the passcode and backend server.");
@@ -187,6 +196,7 @@ function App() {
     event.preventDefault();
     if (!buyingProduct || purchaseSubmitting) return;
 
+    const availableStock = Number(buyingProduct.stockQuantity) || 0;
     const quantity = Math.max(1, Number(purchaseDraft.quantity) || 1);
     const request = {
       productId: buyingProduct.id,
@@ -202,6 +212,11 @@ function App() {
       return;
     }
 
+    if (quantity > availableStock) {
+      setStatusMessage(`Only ${availableStock} units are available for ${buyingProduct.name}.`);
+      return;
+    }
+
     setPurchaseSubmitting(true);
     try {
       const saved = await createPurchaseRequest(request);
@@ -209,11 +224,18 @@ function App() {
       setPurchaseDraft(createEmptyPurchaseDraft());
       setSummary(await fetchSummary());
       if (adminKey) {
-        setPurchaseRequests(await fetchPurchaseRequests(adminKey));
+        const [purchaseRequestData, stockAlertData, productData] = await Promise.all([
+          fetchPurchaseRequests(adminKey),
+          fetchStockAlerts(adminKey),
+          fetchProducts(adminKey)
+        ]);
+        setPurchaseRequests(purchaseRequestData);
+        setStockAlerts(stockAlertData);
+        setProducts(productData);
       }
       setStatusMessage(`Buy request saved for ${saved.productName}.`);
     } catch (error) {
-      setStatusMessage("Buy request failed. Please check the details and try again.");
+      setStatusMessage("Buy request failed. The requested quantity may be higher than available stock.");
     } finally {
       setPurchaseSubmitting(false);
     }
@@ -255,6 +277,7 @@ function App() {
           onSave={saveProduct}
           summary={summary}
           purchaseRequests={purchaseRequests}
+          stockAlerts={stockAlerts}
         />
       )}
 
@@ -464,6 +487,7 @@ function ProductGrid({ products, loading, onPreview, onBuy }) {
 function ProductCard({ product, onPreview, onBuy }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
+  const availableStock = Number(product.stockQuantity) || 0;
 
   return (
     <article className="product-card group">
@@ -483,9 +507,13 @@ function ProductCard({ product, onPreview, onBuy }) {
           <span className="text-xs font-black uppercase text-slate-500">Cost</span>
           <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
         </div>
-        <button className="btn-primary mt-4 w-full min-h-11" type="button" onClick={() => onBuy(product)}>
+        <div className="mt-3 flex items-center justify-between text-sm font-black">
+          <span className="text-slate-500">Available</span>
+          <span className={availableStock < 5 ? "text-amber-700" : "text-clinical"}>{availableStock} in stock</span>
+        </div>
+        <button className="btn-primary mt-4 w-full min-h-11" type="button" onClick={() => onBuy(product)} disabled={availableStock === 0}>
           <ShoppingCart size={18} />
-          Buy
+          {availableStock === 0 ? "Unavailable" : "Buy"}
         </button>
       </div>
     </article>
@@ -524,10 +552,22 @@ function formatRequestTime(value) {
   }).format(new Date(value));
 }
 
+function parseRupeeCost(cost) {
+  const value = Number(String(cost || "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function formatRevenue(product) {
+  const revenue = parseRupeeCost(product.cost) * (Number(product.unitsSold) || 0);
+  return `₹${revenue.toLocaleString("en-IN")}`;
+}
+
 function AdminPage(props) {
   if (!props.isAdmin) {
     return <AdminLogin {...props} />;
   }
+
+  const salesProducts = [...props.products].sort((a, b) => (Number(b.unitsSold) || 0) - (Number(a.unitsSold) || 0));
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-12 lg:px-10">
@@ -544,7 +584,37 @@ function AdminPage(props) {
           <Metric icon={BadgeIndianRupee} label="Priced" value={props.summary.pricedProducts} />
           <Metric icon={Activity} label="Active" value={props.summary.activeProducts} />
           <Metric icon={PackageCheck} label="Buy requests" value={props.summary.purchaseRequests} />
+          <Metric icon={TrendingUp} label="Units sold" value={props.summary.totalUnitsSold} />
+          <Metric icon={AlertTriangle} label="Low stock" value={props.summary.lowStockProducts} />
         </div>
+      </section>
+
+      <section className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="eyebrow text-amber-700">Stock alerts</p>
+            <h2 className="mt-1 text-2xl font-black">Products below 5 available units.</h2>
+          </div>
+          <span className="rounded-md bg-white px-3 py-2 text-sm font-black text-amber-700">{props.stockAlerts.length} alerts</span>
+        </div>
+        {props.stockAlerts.length ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {props.stockAlerts.map((product) => (
+              <article className="rounded-lg border border-amber-200 bg-white p-4" key={product.id}>
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-1 shrink-0 text-amber-600" size={20} />
+                  <div>
+                    <h3 className="font-black leading-tight">{product.name}</h3>
+                    <p className="mt-1 text-sm font-bold text-slate-500">{product.category}</p>
+                    <p className="mt-2 text-sm font-black text-amber-700">Only {product.stockQuantity} left. Update stock soon.</p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-lg border border-amber-100 bg-white p-4 font-bold text-slate-500">No low-stock alerts right now.</div>
+        )}
       </section>
 
       <section className="mt-8 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -569,6 +639,8 @@ function AdminPage(props) {
                 <th className="table-cell">Product</th>
                 <th className="table-cell">Category</th>
                 <th className="table-cell">Cost</th>
+                <th className="table-cell">Stock</th>
+                <th className="table-cell">Sold</th>
                 <th className="table-cell">Status</th>
                 <th className="table-cell">Action</th>
               </tr>
@@ -587,6 +659,19 @@ function AdminPage(props) {
                     <input className="field min-w-44" value={product.cost} onChange={(event) => props.onLocalChange(product.id, "cost", event.target.value)} />
                   </td>
                   <td className="table-cell">
+                    <input
+                      className="field min-w-28"
+                      type="number"
+                      min="0"
+                      value={product.stockQuantity ?? 0}
+                      onChange={(event) => props.onLocalChange(product.id, "stockQuantity", event.target.value)}
+                    />
+                    {(Number(product.stockQuantity) || 0) > 0 && (Number(product.stockQuantity) || 0) < 5 ? (
+                      <div className="mt-2 text-xs font-black uppercase text-amber-700">Low stock</div>
+                    ) : null}
+                  </td>
+                  <td className="table-cell font-black">{product.unitsSold || 0}</td>
+                  <td className="table-cell">
                     <select className="field min-w-36" value={product.status} onChange={(event) => props.onLocalChange(product.id, "status", event.target.value)}>
                       <option>Active</option>
                       <option>Hidden</option>
@@ -597,6 +682,43 @@ function AdminPage(props) {
                       Save
                     </button>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-8 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="eyebrow">Sales dashboard</p>
+            <h2 className="mt-1 text-2xl font-black">Track product sales and remaining stock.</h2>
+          </div>
+          <span className="rounded-md bg-sky-50 px-3 py-2 text-sm font-black text-ocean">{props.summary.totalUnitsSold} units sold</span>
+        </div>
+
+        <div className="mt-5 overflow-auto">
+          <table className="w-full min-w-[860px] border-collapse">
+            <thead>
+              <tr className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                <th className="table-cell">Product</th>
+                <th className="table-cell">Category</th>
+                <th className="table-cell">Units sold</th>
+                <th className="table-cell">Stock left</th>
+                <th className="table-cell">Revenue estimate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {salesProducts.map((product) => (
+                <tr className="border-t border-slate-100" key={product.id}>
+                  <td className="table-cell font-black">{product.name}</td>
+                  <td className="table-cell">{product.category}</td>
+                  <td className="table-cell font-black">{product.unitsSold || 0}</td>
+                  <td className="table-cell">
+                    <span className={(Number(product.stockQuantity) || 0) < 5 ? "font-black text-amber-700" : "font-black text-clinical"}>{product.stockQuantity ?? 0}</span>
+                  </td>
+                  <td className="table-cell font-black">{formatRevenue(product)}</td>
                 </tr>
               ))}
             </tbody>
@@ -683,6 +805,7 @@ function AdminLogin({ adminDraftKey, setAdminDraftKey, onLogin }) {
 function ImagePreviewModal({ product, onClose, onBuy }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
+  const availableStock = Number(product.stockQuantity) || 0;
 
   return (
     <div
@@ -711,11 +834,15 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
           <ProductImage product={product} imageSrc={imageSrc} brochureSrc={brochureSrc} full />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4">
-          <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
+          <div>
+            <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
+            <div className="mt-1 text-sm font-black text-slate-500">{availableStock} in stock</div>
+          </div>
           <div className="flex flex-wrap gap-3">
             <button
               className="btn-primary min-h-11"
               type="button"
+              disabled={availableStock === 0}
               onClick={() => {
                 onBuy(product);
                 onClose();
@@ -732,6 +859,8 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
 }
 
 function PurchaseModal({ product, draft, onChange, onClose, onSubmit, submitting }) {
+  const availableStock = Number(product.stockQuantity) || 0;
+
   return (
     <div
       className="image-modal-backdrop"
@@ -771,7 +900,8 @@ function PurchaseModal({ product, draft, onChange, onClose, onSubmit, submitting
           </label>
           <label className="block">
             <span className="mb-2 block text-sm font-black text-slate-500">Quantity</span>
-            <input className="field" type="number" min="1" max="99" value={draft.quantity} onChange={(event) => onChange("quantity", event.target.value)} required />
+            <input className="field" type="number" min="1" max={Math.min(99, availableStock)} value={draft.quantity} onChange={(event) => onChange("quantity", event.target.value)} required />
+            <span className="mt-2 block text-xs font-black uppercase text-slate-500">{availableStock} available</span>
           </label>
           <label className="block sm:col-span-2">
             <span className="mb-2 block text-sm font-black text-slate-500">Notes</span>
