@@ -40,7 +40,7 @@ Parameters:
     NoEcho: true
   AdminEmail:
     Type: String
-    Default: sandeepkumarparangi97@gmail.com
+    Default: sandeepkumar.parangi@gmail.com
   VpcCidr:
     Type: String
     Default: 10.42.0.0/16
@@ -203,6 +203,11 @@ Resources:
       LogGroupName: !Sub "/antrocare/${EnvironmentName}/app"
       RetentionInDays: 14
 
+  AlertEmailIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref AdminEmail
+
   DbSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -268,6 +273,11 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${DbPasswordParameterName}"
                   - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${AdminKeyParameterName}"
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: "*"
 
   Ec2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -324,6 +334,8 @@ Resources:
           ANTROCARE_ADMIN_EMAIL=${AdminEmail}
           ANTROCARE_LOW_STOCK_THRESHOLD=5
           ANTROCARE_MAIL_ALERTS_ENABLED=false
+          ANTROCARE_SES_ALERTS_ENABLED=true
+          AWS_REGION=${AWS::Region}
           JAVA_OPTS=-XX:MaxRAMPercentage=70 -Djava.security.egd=file:/dev/./urandom
           STATIC_CACHE_PERIOD=86400
           ENVEOF
