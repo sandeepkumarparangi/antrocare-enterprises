@@ -50,9 +50,10 @@ export function fetchStockAlerts(adminKey) {
   return request("/api/stock-alerts", { adminKey });
 }
 
-export function createPurchaseRequest(purchaseRequest) {
+export function createPurchaseRequest(purchaseRequest, authToken) {
   return request("/api/purchase-requests", {
     method: "POST",
+    authToken,
     body: purchaseRequest
   });
 }

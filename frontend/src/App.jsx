@@ -39,11 +39,11 @@ function readStoredSession() {
   }
 }
 
-function createEmptyPurchaseDraft() {
+function createEmptyPurchaseDraft(session = null) {
   return {
-    buyerName: "",
+    buyerName: session?.displayName && session.displayName !== session.email ? session.displayName : "",
     buyerPhone: "",
-    buyerEmail: "",
+    buyerEmail: session?.email || "",
     quantity: 1,
     notes: ""
   };
@@ -65,6 +65,7 @@ function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [previewProduct, setPreviewProduct] = useState(null);
   const [buyingProduct, setBuyingProduct] = useState(null);
+  const [pendingPurchaseProduct, setPendingPurchaseProduct] = useState(null);
   const [purchaseDraft, setPurchaseDraft] = useState(createEmptyPurchaseDraft);
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -186,7 +187,14 @@ function App() {
       sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
       setAuthSession(session);
       setUserDraft({ name: "", email: "", password: "" });
-      setStatusMessage(authMode === "signup" ? "User account created." : "User signed in.");
+      if (pendingPurchaseProduct) {
+        setBuyingProduct(pendingPurchaseProduct);
+        setPendingPurchaseProduct(null);
+        setPurchaseDraft(createEmptyPurchaseDraft(session));
+        setStatusMessage("Signed in. Complete the buy request below.");
+      } else {
+        setStatusMessage(authMode === "signup" ? "User account created." : "User signed in.");
+      }
       setView("catalog");
     } catch (error) {
       setStatusMessage(authMode === "signup" ? "Signup failed. Try another email." : "User login failed.");
@@ -224,8 +232,18 @@ function App() {
   }
 
   function openPurchaseModal(product) {
+    if (!authSession?.token) {
+      setPendingPurchaseProduct(product);
+      setBuyingProduct(null);
+      setPreviewProduct(null);
+      setAuthMode("login");
+      setView("account");
+      setStatusMessage("Please login or signup before buying this product.");
+      return;
+    }
+
     setBuyingProduct(product);
-    setPurchaseDraft(createEmptyPurchaseDraft());
+    setPurchaseDraft(createEmptyPurchaseDraft(authSession));
   }
 
   function updatePurchaseDraft(field, value) {
@@ -235,6 +253,15 @@ function App() {
   async function submitPurchaseRequest(event) {
     event.preventDefault();
     if (!buyingProduct || purchaseSubmitting) return;
+
+    if (!authSession?.token) {
+      setBuyingProduct(null);
+      setPendingPurchaseProduct(buyingProduct);
+      setAuthMode("login");
+      setView("account");
+      setStatusMessage("Please login or signup before buying this product.");
+      return;
+    }
 
     const availableStock = Number(buyingProduct.stockQuantity) || 0;
     const quantity = Math.max(1, Number(purchaseDraft.quantity) || 1);
@@ -259,7 +286,7 @@ function App() {
 
     setPurchaseSubmitting(true);
     try {
-      const saved = await createPurchaseRequest(request);
+      const saved = await createPurchaseRequest(request, authSession.token);
       setBuyingProduct(null);
       setPurchaseDraft(createEmptyPurchaseDraft());
       setSummary(await fetchSummary());
@@ -273,9 +300,9 @@ function App() {
         setStockAlerts(stockAlertData);
         setProducts(productData);
       }
-      setStatusMessage(`Buy request saved for ${saved.productName}.`);
+      setStatusMessage(`Successfully placed an item: ${saved.productName}.`);
     } catch (error) {
-      setStatusMessage("Buy request failed. The requested quantity may be higher than available stock.");
+      setStatusMessage("Buy request failed. Please login again or check available stock.");
     } finally {
       setPurchaseSubmitting(false);
     }

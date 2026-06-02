@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.antrocare.catalog.auth.AuthSession;
 import com.antrocare.catalog.auth.AuthService;
 
 @RestController
@@ -99,7 +100,15 @@ public class ProductController {
 
     @PostMapping("/purchase-requests")
     @Transactional
-    public ResponseEntity<PurchaseRequest> createPurchaseRequest(@Valid @RequestBody ProductPurchaseRequest request) {
+    public ResponseEntity<PurchaseRequest> createPurchaseRequest(
+        @Valid @RequestBody ProductPurchaseRequest request,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        AuthSession session = authService.findValidSession(authToken).orElse(null);
+        if (session == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
         return productRepository.findById(request.productId().trim())
             .filter(product -> "Active".equals(product.getStatus()))
             .map(product -> {
