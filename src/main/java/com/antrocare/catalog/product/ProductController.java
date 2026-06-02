@@ -6,7 +6,6 @@ import java.util.List;
 import jakarta.validation.Valid;
 import jakarta.transaction.Transactional;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -20,6 +19,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.antrocare.catalog.auth.AuthSession;
+import com.antrocare.catalog.auth.AuthService;
+
 @RestController
 @RequestMapping("/api")
 @CrossOrigin
@@ -28,26 +30,27 @@ public class ProductController {
     private final ProductRepository productRepository;
     private final PurchaseRequestRepository purchaseRequestRepository;
     private final LowStockAlertService lowStockAlertService;
-    private final String adminKey;
+    private final AuthService authService;
 
     public ProductController(
         ProductRepository productRepository,
         PurchaseRequestRepository purchaseRequestRepository,
         LowStockAlertService lowStockAlertService,
-        @Value("${antrocare.admin-key}") String adminKey
+        AuthService authService
     ) {
         this.productRepository = productRepository;
         this.purchaseRequestRepository = purchaseRequestRepository;
         this.lowStockAlertService = lowStockAlertService;
-        this.adminKey = adminKey;
+        this.authService = authService;
     }
 
     @GetMapping("/products")
     public ResponseEntity<List<Product>> products(
         @RequestParam(defaultValue = "false") boolean includeHidden,
-        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey
+        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
     ) {
-        if (includeHidden && !isAdmin(providedAdminKey)) {
+        if (includeHidden && !isAdmin(providedAdminKey, authToken)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -85,9 +88,10 @@ public class ProductController {
 
     @GetMapping("/stock-alerts")
     public ResponseEntity<List<Product>> stockAlerts(
-        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey
+        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
     ) {
-        if (!isAdmin(providedAdminKey)) {
+        if (!isAdmin(providedAdminKey, authToken)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -96,7 +100,15 @@ public class ProductController {
 
     @PostMapping("/purchase-requests")
     @Transactional
-    public ResponseEntity<PurchaseRequest> createPurchaseRequest(@Valid @RequestBody ProductPurchaseRequest request) {
+    public ResponseEntity<PurchaseRequest> createPurchaseRequest(
+        @Valid @RequestBody ProductPurchaseRequest request,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        AuthSession session = authService.findValidSession(authToken).orElse(null);
+        if (session == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
         return productRepository.findById(request.productId().trim())
             .filter(product -> "Active".equals(product.getStatus()))
             .map(product -> {
@@ -117,9 +129,10 @@ public class ProductController {
 
     @GetMapping("/purchase-requests")
     public ResponseEntity<List<PurchaseRequest>> purchaseRequests(
-        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey
+        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
     ) {
-        if (!isAdmin(providedAdminKey)) {
+        if (!isAdmin(providedAdminKey, authToken)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -130,9 +143,10 @@ public class ProductController {
     public ResponseEntity<Product> updateProduct(
         @PathVariable String id,
         @Valid @RequestBody ProductUpdateRequest request,
-        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey
+        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
     ) {
-        if (!isAdmin(providedAdminKey)) {
+        if (!isAdmin(providedAdminKey, authToken)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -147,7 +161,7 @@ public class ProductController {
             .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    private boolean isAdmin(String providedAdminKey) {
-        return adminKey.equals(providedAdminKey);
+    private boolean isAdmin(String providedAdminKey, String authToken) {
+        return authService.isAdmin(providedAdminKey, authToken);
     }
 }

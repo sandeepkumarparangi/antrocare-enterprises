@@ -22,18 +22,28 @@ import {
   Store,
   ShoppingCart,
   TrendingUp,
+  UserCircle,
+  UserPlus,
   X
 } from "lucide-react";
-import { createPurchaseRequest, fetchCategories, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, mediaUrl, updateProduct } from "./api";
+import { createPurchaseRequest, fetchCategories, fetchCurrentSession, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, signupUser, updateProduct } from "./api";
 
-const ADMIN_SESSION_KEY = "antrocare-admin-key";
+const AUTH_SESSION_KEY = "antrocare-auth-session";
 const DEFAULT_COST = "₹50";
 
-function createEmptyPurchaseDraft() {
+function readStoredSession() {
+  try {
+    return JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function createEmptyPurchaseDraft(session = null) {
   return {
-    buyerName: "",
+    buyerName: session?.displayName && session.displayName !== session.email ? session.displayName : "",
     buyerPhone: "",
-    buyerEmail: "",
+    buyerEmail: session?.email || "",
     quantity: 1,
     notes: ""
   };
@@ -48,21 +58,36 @@ function App() {
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [view, setView] = useState("catalog");
-  const [adminKey, setAdminKey] = useState(() => sessionStorage.getItem(ADMIN_SESSION_KEY) || "");
+  const [authSession, setAuthSession] = useState(readStoredSession);
   const [adminDraftKey, setAdminDraftKey] = useState("");
+  const [authMode, setAuthMode] = useState("login");
+  const [userDraft, setUserDraft] = useState({ name: "", email: "", password: "" });
   const [statusMessage, setStatusMessage] = useState("");
   const [previewProduct, setPreviewProduct] = useState(null);
   const [buyingProduct, setBuyingProduct] = useState(null);
+  const [pendingPurchaseProduct, setPendingPurchaseProduct] = useState(null);
   const [purchaseDraft, setPurchaseDraft] = useState(createEmptyPurchaseDraft);
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = Boolean(adminKey);
+  const isAdmin = authSession?.role === "ADMIN";
+  const isUser = authSession?.role === "USER";
+  const adminKey = isAdmin ? authSession.token : "";
 
   useEffect(() => {
     loadCatalog(adminKey);
   }, [adminKey]);
+
+  useEffect(() => {
+    if (!authSession?.token) return undefined;
+
+    fetchCurrentSession(authSession.token).catch(() => {
+      sessionStorage.removeItem(AUTH_SESSION_KEY);
+      setAuthSession(null);
+      setView("catalog");
+    });
+  }, [authSession?.token]);
 
   useEffect(() => {
     if (!previewProduct && !buyingProduct) return undefined;
@@ -133,35 +158,58 @@ function App() {
     setLoading(true);
 
     try {
-      const [productData, categoryData, summaryData, purchaseRequestData, stockAlertData] = await Promise.all([
-        fetchProducts(key),
-        fetchCategories(),
-        fetchSummary(),
-        fetchPurchaseRequests(key),
-        fetchStockAlerts(key)
-      ]);
-      setProducts(productData);
-      setCategories(["All", ...categoryData]);
-      setSummary(summaryData);
-      setPurchaseRequests(purchaseRequestData);
-      setStockAlerts(stockAlertData);
-      sessionStorage.setItem(ADMIN_SESSION_KEY, key);
-      setAdminKey(key);
+      const session = await loginAdmin(key);
+      sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+      setAuthSession(session);
       setAdminDraftKey("");
-      setStatusMessage("Admin console unlocked.");
+      setStatusMessage("Admin signed in.");
       setView("admin");
     } catch (error) {
-      sessionStorage.removeItem(ADMIN_SESSION_KEY);
-      setAdminKey("");
-      setStatusMessage("Invalid admin passcode.");
+      sessionStorage.removeItem(AUTH_SESSION_KEY);
+      setAuthSession(null);
+      setStatusMessage("Invalid admin password.");
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleUserAuth(event) {
+    event.preventDefault();
+    setLoading(true);
+
+    try {
+      const payload = {
+        name: userDraft.name.trim(),
+        email: userDraft.email.trim(),
+        password: userDraft.password
+      };
+      const session = authMode === "signup" ? await signupUser(payload) : await loginUser(payload);
+      sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+      setAuthSession(session);
+      setUserDraft({ name: "", email: "", password: "" });
+      if (pendingPurchaseProduct) {
+        setBuyingProduct(pendingPurchaseProduct);
+        setPendingPurchaseProduct(null);
+        setPurchaseDraft(createEmptyPurchaseDraft(session));
+        setStatusMessage("Signed in. Complete the buy request below.");
+      } else {
+        setStatusMessage(authMode === "signup" ? "User account created." : "User signed in.");
+      }
+      setView("catalog");
+    } catch (error) {
+      setStatusMessage(authMode === "signup" ? "Signup failed. Try another email." : "User login failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function updateUserDraft(field, value) {
+    setUserDraft((current) => ({ ...current, [field]: value }));
+  }
+
   function signOut() {
-    sessionStorage.removeItem(ADMIN_SESSION_KEY);
-    setAdminKey("");
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    setAuthSession(null);
     setPurchaseRequests([]);
     setStockAlerts([]);
     setView("catalog");
@@ -184,8 +232,18 @@ function App() {
   }
 
   function openPurchaseModal(product) {
+    if (!authSession?.token) {
+      setPendingPurchaseProduct(product);
+      setBuyingProduct(null);
+      setPreviewProduct(null);
+      setAuthMode("login");
+      setView("account");
+      setStatusMessage("Please login or signup before buying this product.");
+      return;
+    }
+
     setBuyingProduct(product);
-    setPurchaseDraft(createEmptyPurchaseDraft());
+    setPurchaseDraft(createEmptyPurchaseDraft(authSession));
   }
 
   function updatePurchaseDraft(field, value) {
@@ -195,6 +253,15 @@ function App() {
   async function submitPurchaseRequest(event) {
     event.preventDefault();
     if (!buyingProduct || purchaseSubmitting) return;
+
+    if (!authSession?.token) {
+      setBuyingProduct(null);
+      setPendingPurchaseProduct(buyingProduct);
+      setAuthMode("login");
+      setView("account");
+      setStatusMessage("Please login or signup before buying this product.");
+      return;
+    }
 
     const availableStock = Number(buyingProduct.stockQuantity) || 0;
     const quantity = Math.max(1, Number(purchaseDraft.quantity) || 1);
@@ -219,7 +286,7 @@ function App() {
 
     setPurchaseSubmitting(true);
     try {
-      const saved = await createPurchaseRequest(request);
+      const saved = await createPurchaseRequest(request, authSession.token);
       setBuyingProduct(null);
       setPurchaseDraft(createEmptyPurchaseDraft());
       setSummary(await fetchSummary());
@@ -233,9 +300,9 @@ function App() {
         setStockAlerts(stockAlertData);
         setProducts(productData);
       }
-      setStatusMessage(`Buy request saved for ${saved.productName}.`);
+      setStatusMessage(`Successfully placed an item: ${saved.productName}.`);
     } catch (error) {
-      setStatusMessage("Buy request failed. The requested quantity may be higher than available stock.");
+      setStatusMessage("Buy request failed. Please login again or check available stock.");
     } finally {
       setPurchaseSubmitting(false);
     }
@@ -243,7 +310,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-mist text-ink">
-      <Header view={view} setView={setView} isAdmin={isAdmin} onHeightChange={setHeaderHeight} />
+      <Header view={view} setView={setView} authSession={authSession} isAdmin={isAdmin} isUser={isUser} onHeightChange={setHeaderHeight} onSignOut={signOut} />
 
       {view === "catalog" ? (
         <CatalogPage
@@ -259,6 +326,16 @@ function App() {
           onPreview={setPreviewProduct}
           onBuy={openPurchaseModal}
           headerHeight={headerHeight}
+        />
+      ) : view === "account" ? (
+        <AccountPage
+          authMode={authMode}
+          setAuthMode={setAuthMode}
+          userDraft={userDraft}
+          updateUserDraft={updateUserDraft}
+          onSubmit={handleUserAuth}
+          authSession={authSession}
+          onSignOut={signOut}
         />
       ) : (
         <AdminPage
@@ -298,7 +375,7 @@ function App() {
   );
 }
 
-function Header({ view, setView, isAdmin, onHeightChange }) {
+function Header({ view, setView, authSession, isAdmin, isUser, onHeightChange, onSignOut }) {
   const headerRef = useRef(null);
 
   useEffect(() => {
@@ -332,7 +409,19 @@ function Header({ view, setView, isAdmin, onHeightChange }) {
 
         <nav className="flex flex-wrap gap-2">
           <NavButton active={view === "catalog"} onClick={() => setView("catalog")} icon={Store} label="User catalog" />
-          <NavButton active={view === "admin"} onClick={() => setView("admin")} icon={ShieldCheck} label={isAdmin ? "Admin console" : "Admin sign in"} />
+          {isAdmin ? (
+            <NavButton active={view === "admin"} onClick={() => setView("admin")} icon={ShieldCheck} label="Admin console" />
+          ) : null}
+          {!isAdmin && !isUser ? (
+            <NavButton active={view === "admin"} onClick={() => setView("admin")} icon={ShieldCheck} label="Admin sign in" />
+          ) : null}
+          <NavButton active={view === "account"} onClick={() => setView("account")} icon={isUser ? UserCircle : UserPlus} label={authSession ? authSession.displayName : "User login"} />
+          {authSession ? (
+            <button className="nav-pill" onClick={onSignOut} type="button">
+              <LogOut size={18} />
+              Sign out
+            </button>
+          ) : null}
           <a className="nav-pill" href="#contact">
             <Mail size={18} />
             Contact
@@ -560,6 +649,70 @@ function parseRupeeCost(cost) {
 function formatRevenue(product) {
   const revenue = parseRupeeCost(product.cost) * (Number(product.unitsSold) || 0);
   return `₹${revenue.toLocaleString("en-IN")}`;
+}
+
+function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubmit, authSession, onSignOut }) {
+  if (authSession) {
+    return (
+      <main className="grid min-h-[calc(100vh-80px)] place-items-center bg-white px-4 py-12">
+        <section className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-8 shadow-soft">
+          <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-50 text-clinical">
+            <UserCircle size={28} />
+          </div>
+          <p className="eyebrow">{authSession.role === "ADMIN" ? "Admin session" : "User account"}</p>
+          <h1 className="text-4xl font-black leading-tight">{authSession.displayName}</h1>
+          <p className="mt-3 font-bold text-slate-500">{authSession.email}</p>
+          <p className="mt-5 leading-7 text-slate-600">
+            {authSession.role === "ADMIN"
+              ? "This session can access the catalog, stock controls, sales dashboard, and admin pages."
+              : "This session can browse products and send buy requests. Admin pages stay hidden for regular users."}
+          </p>
+          <button className="btn-secondary mt-6 w-full" onClick={onSignOut} type="button">
+            <LogOut size={18} />
+            Sign out
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  const isSignup = authMode === "signup";
+
+  return (
+    <main className="grid min-h-[calc(100vh-80px)] place-items-center bg-white px-4 py-12">
+      <form className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-8 shadow-soft" onSubmit={onSubmit}>
+        <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-50 text-clinical">
+          {isSignup ? <UserPlus size={28} /> : <UserCircle size={28} />}
+        </div>
+        <p className="eyebrow">User access</p>
+        <h1 className="text-4xl font-black leading-tight">{isSignup ? "Create a user account." : "Sign in as a user."}</h1>
+        <p className="mt-3 leading-7 text-slate-600">Users can browse products and send buy requests. Admin stock and sales tools remain private.</p>
+
+        {isSignup ? (
+          <label className="mt-6 block">
+            <span className="mb-2 block text-sm font-black text-slate-500">Name</span>
+            <input className="field" value={userDraft.name} onChange={(event) => updateUserDraft("name", event.target.value)} required />
+          </label>
+        ) : null}
+        <label className={isSignup ? "mt-4 block" : "mt-6 block"}>
+          <span className="mb-2 block text-sm font-black text-slate-500">Email</span>
+          <input className="field" type="email" value={userDraft.email} onChange={(event) => updateUserDraft("email", event.target.value)} required />
+        </label>
+        <label className="mt-4 block">
+          <span className="mb-2 block text-sm font-black text-slate-500">Password</span>
+          <input className="field" type="password" minLength="6" value={userDraft.password} onChange={(event) => updateUserDraft("password", event.target.value)} required />
+        </label>
+
+        <button className="btn-primary mt-5 w-full" type="submit">
+          {isSignup ? <UserPlus size={19} /> : <UserCircle size={19} />}
+          {isSignup ? "Create account" : "Sign in"}
+        </button>
+        <button className="mt-4 w-full rounded-md px-4 py-3 text-sm font-black text-ocean transition hover:bg-sky-50" type="button" onClick={() => setAuthMode(isSignup ? "login" : "signup")}>
+          {isSignup ? "Already have an account? Sign in" : "New user? Create an account"}
+        </button>
+      </form>
+    </main>
+  );
 }
 
 function AdminPage(props) {

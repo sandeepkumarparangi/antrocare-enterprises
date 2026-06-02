@@ -16,7 +16,8 @@ async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      ...(options.adminKey ? { "X-Admin-Key": options.adminKey } : {})
+      ...(options.adminKey ? { "X-Admin-Key": options.adminKey, "X-Auth-Token": options.adminKey } : {}),
+      ...(options.authToken ? { "X-Auth-Token": options.authToken } : {})
     },
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined
@@ -49,9 +50,10 @@ export function fetchStockAlerts(adminKey) {
   return request("/api/stock-alerts", { adminKey });
 }
 
-export function createPurchaseRequest(purchaseRequest) {
+export function createPurchaseRequest(purchaseRequest, authToken) {
   return request("/api/purchase-requests", {
     method: "POST",
+    authToken,
     body: purchaseRequest
   });
 }
@@ -66,4 +68,29 @@ export function updateProduct(product, adminKey) {
       stockQuantity: Number(product.stockQuantity) || 0
     }
   });
+}
+
+export function signupUser(account) {
+  return request("/api/auth/signup", {
+    method: "POST",
+    body: account
+  });
+}
+
+export function loginUser(credentials) {
+  return request("/api/auth/login", {
+    method: "POST",
+    body: credentials
+  });
+}
+
+export function loginAdmin(password) {
+  return request("/api/auth/admin/login", {
+    method: "POST",
+    body: { password }
+  });
+}
+
+export function fetchCurrentSession(authToken) {
+  return request("/api/auth/me", { authToken });
 }

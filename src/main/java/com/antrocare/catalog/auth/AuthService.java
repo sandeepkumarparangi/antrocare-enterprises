@@ -1,0 +1,136 @@
+package com.antrocare.catalog.auth;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.Optional;
+
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AuthService {
+
+    private static final int HASH_ITERATIONS = 120_000;
+    private static final int HASH_BYTES = 32;
+    private static final Duration SESSION_DURATION = Duration.ofDays(7);
+
+    private final SecureRandom secureRandom = new SecureRandom();
+    private final UserAccountRepository userAccountRepository;
+    private final AuthSessionRepository authSessionRepository;
+    private final String adminKey;
+
+    public AuthService(
+        UserAccountRepository userAccountRepository,
+        AuthSessionRepository authSessionRepository,
+        @Value("${antrocare.admin-key}") String adminKey
+    ) {
+        this.userAccountRepository = userAccountRepository;
+        this.authSessionRepository = authSessionRepository;
+        this.adminKey = adminKey;
+    }
+
+    public AuthSession signup(String name, String email, String password) {
+        String normalizedEmail = normalizeEmail(email);
+        if (normalizedEmail.isBlank() || userAccountRepository.existsByEmail(normalizedEmail)) {
+            throw new IllegalArgumentException("Email is already registered.");
+        }
+
+        String displayName = name == null || name.isBlank() ? normalizedEmail : name.trim();
+        UserAccount user = userAccountRepository.save(new UserAccount(displayName, normalizedEmail, hashPassword(password)));
+        return createSession(user.getEmail(), user.getName(), user.getRole());
+    }
+
+    public AuthSession loginUser(String email, String password) {
+        String normalizedEmail = normalizeEmail(email);
+        UserAccount user = userAccountRepository.findByEmail(normalizedEmail)
+            .filter(account -> verifyPassword(password, account.getPasswordHash()))
+            .orElseThrow(() -> new IllegalArgumentException("Invalid user login."));
+        return createSession(user.getEmail(), user.getName(), user.getRole());
+    }
+
+    public AuthSession loginAdmin(String password) {
+        if (!constantTimeEquals(adminKey, password == null ? "" : password.trim())) {
+            throw new IllegalArgumentException("Invalid admin login.");
+        }
+        return createSession("admin@antrocare.local", "Admin", "ADMIN");
+    }
+
+    public Optional<AuthSession> findValidSession(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
+        return authSessionRepository.findById(token.trim()).filter(session -> !session.isExpired());
+    }
+
+    public boolean isAdmin(String legacyAdminKey, String authToken) {
+        if (constantTimeEquals(adminKey, legacyAdminKey == null ? "" : legacyAdminKey.trim())) {
+            return true;
+        }
+
+        return findValidSession(authToken)
+            .map(AuthSession::getRole)
+            .filter("ADMIN"::equals)
+            .isPresent();
+    }
+
+    private AuthSession createSession(String email, String displayName, String role) {
+        AuthSession session = new AuthSession(newToken(), email, displayName, role, Instant.now().plus(SESSION_DURATION));
+        return authSessionRepository.save(session);
+    }
+
+    private String newToken() {
+        byte[] tokenBytes = new byte[32];
+        secureRandom.nextBytes(tokenBytes);
+        return HexFormat.of().formatHex(tokenBytes);
+    }
+
+    private String hashPassword(String password) {
+        try {
+            byte[] salt = new byte[16];
+            secureRandom.nextBytes(salt);
+            byte[] hash = pbkdf2(password, salt);
+            return HASH_ITERATIONS + ":" + Base64.getEncoder().encodeToString(salt) + ":" + Base64.getEncoder().encodeToString(hash);
+        } catch (Exception error) {
+            throw new IllegalStateException("Could not hash password.", error);
+        }
+    }
+
+    private boolean verifyPassword(String password, String storedHash) {
+        try {
+            String[] parts = storedHash.split(":");
+            if (parts.length != 3) {
+                return false;
+            }
+            byte[] salt = Base64.getDecoder().decode(parts[1]);
+            byte[] expected = Base64.getDecoder().decode(parts[2]);
+            byte[] actual = pbkdf2(password, salt);
+            return MessageDigest.isEqual(expected, actual);
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
+    private byte[] pbkdf2(String password, byte[] salt) throws Exception {
+        PBEKeySpec spec = new PBEKeySpec((password == null ? "" : password).toCharArray(), salt, HASH_ITERATIONS, HASH_BYTES * 8);
+        return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+    }
+
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase();
+    }
+
+    private boolean constantTimeEquals(String left, String right) {
+        return MessageDigest.isEqual(
+            left.getBytes(StandardCharsets.UTF_8),
+            right.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+}
