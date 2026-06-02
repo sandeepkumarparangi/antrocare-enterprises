@@ -213,6 +213,31 @@ aws cloudformation describe-stacks \
   --query 'Stacks[0].Outputs[].{Name:OutputKey,Value:OutputValue}' \
   --output table
 
+APP_INSTANCE_ID="$(aws cloudformation describe-stacks \
+  --region "$REGION" \
+  --stack-name "$STACK_NAME" \
+  --query 'Stacks[0].Outputs[?OutputKey==`AppInstanceId`].OutputValue | [0]' \
+  --output text)"
+
+if [ -n "$APP_INSTANCE_ID" ] && [ "$APP_INSTANCE_ID" != "None" ]; then
+  echo "Refreshing app jar on $APP_INSTANCE_ID..."
+  COMMAND_ID="$(aws ssm send-command \
+    --region "$REGION" \
+    --instance-ids "$APP_INSTANCE_ID" \
+    --document-name AWS-RunShellScript \
+    --comment "Refresh Antrocare app jar after deploy" \
+    --parameters "commands=[\"aws s3 cp s3://${ARTIFACT_BUCKET}/${ARTIFACT_KEY} /opt/antrocare/antrocare.jar --region ${REGION}\",\"chown ec2-user:ec2-user /opt/antrocare/antrocare.jar\",\"systemctl restart antrocare\",\"sleep 8\",\"systemctl is-active antrocare\"]" \
+    --query 'Command.CommandId' \
+    --output text)"
+  aws ssm wait command-executed --region "$REGION" --command-id "$COMMAND_ID" --instance-id "$APP_INSTANCE_ID"
+  aws ssm get-command-invocation \
+    --region "$REGION" \
+    --command-id "$COMMAND_ID" \
+    --instance-id "$APP_INSTANCE_ID" \
+    --query '{Status:Status,Output:StandardOutputContent,Error:StandardErrorContent}' \
+    --output table
+fi
+
 echo
 echo "Local admin key is saved in: $SECRETS_FILE"
 echo "AWS admin key command:"

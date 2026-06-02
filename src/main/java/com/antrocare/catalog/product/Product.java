@@ -25,11 +25,11 @@ public class Product {
     @NotBlank
     private String status;
 
-    private int stockQuantity = 50;
+    private Integer stockQuantity = 50;
 
-    private int unitsSold;
+    private Integer unitsSold = 0;
 
-    private boolean lowStockAlertSent;
+    private Boolean lowStockAlertSent = false;
 
     @Column(length = 220)
     private String useDescription;
@@ -81,15 +81,15 @@ public class Product {
     }
 
     public int getStockQuantity() {
-        return stockQuantity;
+        return stockQuantity == null ? 50 : stockQuantity;
     }
 
     public int getUnitsSold() {
-        return unitsSold;
+        return unitsSold == null ? 0 : unitsSold;
     }
 
     public boolean isLowStockAlertSent() {
-        return lowStockAlertSent;
+        return Boolean.TRUE.equals(lowStockAlertSent);
     }
 
     public String getUseDescription() {
@@ -111,20 +111,20 @@ public class Product {
     public void update(String cost, String status, int stockQuantity) {
         this.cost = cost;
         this.stockQuantity = Math.max(0, stockQuantity);
-        this.status = this.stockQuantity == 0 ? "Hidden" : status;
-        if (this.stockQuantity >= LOW_STOCK_THRESHOLD) {
+        this.status = getStockQuantity() == 0 ? "Hidden" : status;
+        if (getStockQuantity() >= LOW_STOCK_THRESHOLD) {
             this.lowStockAlertSent = false;
         }
     }
 
     public void recordSale(int quantity) {
         int saleQuantity = Math.max(1, quantity);
-        if (saleQuantity > stockQuantity) {
+        if (saleQuantity > getStockQuantity()) {
             throw new IllegalArgumentException("Requested quantity is greater than available stock.");
         }
-        this.stockQuantity -= saleQuantity;
-        this.unitsSold += saleQuantity;
-        if (this.stockQuantity == 0) {
+        this.stockQuantity = getStockQuantity() - saleQuantity;
+        this.unitsSold = getUnitsSold() + saleQuantity;
+        if (getStockQuantity() == 0) {
             this.status = "Hidden";
         }
     }
@@ -133,19 +133,19 @@ public class Product {
         if ("Price on request".equals(cost)) {
             this.cost = defaultCost;
         }
-        if (stockQuantity <= 0 && unitsSold == 0) {
+        if (getStockQuantity() <= 0 && getUnitsSold() == 0) {
             this.stockQuantity = defaultStock;
             if ("Hidden".equals(status)) {
                 this.status = "Active";
             }
         }
-        if (stockQuantity >= LOW_STOCK_THRESHOLD) {
+        if (getStockQuantity() >= LOW_STOCK_THRESHOLD) {
             this.lowStockAlertSent = false;
         }
     }
 
     public boolean isLowStock(int threshold) {
-        return stockQuantity > 0 && stockQuantity < threshold;
+        return getStockQuantity() > 0 && getStockQuantity() < threshold;
     }
 
     public void markLowStockAlertSent() {
