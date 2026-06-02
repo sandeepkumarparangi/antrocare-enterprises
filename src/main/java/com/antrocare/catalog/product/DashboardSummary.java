@@ -5,6 +5,8 @@ public record DashboardSummary(
     long activeProducts,
     long pricedProducts,
     long categories,
-    long purchaseRequests
+    long purchaseRequests,
+    long totalUnitsSold,
+    long lowStockProducts
 ) {
 }

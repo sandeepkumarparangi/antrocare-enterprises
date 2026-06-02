@@ -45,6 +45,10 @@ export function fetchPurchaseRequests(adminKey) {
   return request("/api/purchase-requests", { adminKey });
 }
 
+export function fetchStockAlerts(adminKey) {
+  return request("/api/stock-alerts", { adminKey });
+}
+
 export function createPurchaseRequest(purchaseRequest) {
   return request("/api/purchase-requests", {
     method: "POST",
@@ -58,7 +62,8 @@ export function updateProduct(product, adminKey) {
     adminKey,
     body: {
       cost: product.cost,
-      status: product.status
+      status: product.status,
+      stockQuantity: Number(product.stockQuantity) || 0
     }
   });
 }
