@@ -200,7 +200,7 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      LogGroupName: !Sub "/antrocare/${EnvironmentName}/app"
+      LogGroupName: !Sub "/antrocare/${ProjectName}/${EnvironmentName}/app"
       RetentionInDays: 14
 
   AlertEmailIdentity:
@@ -224,7 +224,7 @@ Resources:
     DeletionPolicy: Snapshot
     UpdateReplacePolicy: Snapshot
     Properties:
-      DBInstanceIdentifier: !Sub "${ProjectName}-${EnvironmentName}-postgres"
+      DBInstanceIdentifier: !Sub "${ProjectName}-${EnvironmentName}-postgres-v2"
       DBName: !Ref DbName
       Engine: postgres
       DBInstanceClass: db.t3.micro
