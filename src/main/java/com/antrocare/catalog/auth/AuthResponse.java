@@ -7,6 +7,7 @@ public record AuthResponse(
     String role,
     String email,
     String displayName,
+    boolean mainAdmin,
     Instant expiresAt
 ) {
     public static AuthResponse from(AuthSession session) {
@@ -15,6 +16,7 @@ public record AuthResponse(
             session.getRole(),
             session.getEmail(),
             session.getDisplayName(),
+            session.isMainAdmin(),
             session.getExpiresAt()
         );
     }

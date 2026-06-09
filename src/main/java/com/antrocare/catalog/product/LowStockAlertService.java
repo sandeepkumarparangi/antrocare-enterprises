@@ -93,6 +93,7 @@ public class LowStockAlertService {
 
         try {
             SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(adminEmail);
             message.setTo(adminEmail);
             message.setSubject(subject);
             message.setText(body);

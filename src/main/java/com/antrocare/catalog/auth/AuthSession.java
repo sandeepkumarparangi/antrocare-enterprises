@@ -22,16 +22,20 @@ public class AuthSession {
     private String role;
 
     @Column(nullable = false)
+    private boolean mainAdmin;
+
+    @Column(nullable = false)
     private Instant expiresAt;
 
     protected AuthSession() {
     }
 
-    public AuthSession(String token, String email, String displayName, String role, Instant expiresAt) {
+    public AuthSession(String token, String email, String displayName, String role, boolean mainAdmin, Instant expiresAt) {
         this.token = token;
         this.email = email;
         this.displayName = displayName;
         this.role = role;
+        this.mainAdmin = mainAdmin;
         this.expiresAt = expiresAt;
     }
 
@@ -49,6 +53,10 @@ public class AuthSession {
 
     public String getRole() {
         return role;
+    }
+
+    public boolean isMainAdmin() {
+        return mainAdmin;
     }
 
     public Instant getExpiresAt() {

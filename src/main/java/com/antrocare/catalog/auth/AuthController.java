@@ -1,11 +1,15 @@
 package com.antrocare.catalog.auth;
 
+import java.util.List;
+
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -44,9 +48,49 @@ public class AuthController {
     @PostMapping("/admin/login")
     public ResponseEntity<AuthResponse> adminLogin(@Valid @RequestBody AuthRequest request) {
         try {
-            return ResponseEntity.ok(AuthResponse.from(authService.loginAdmin(request.password())));
+            return ResponseEntity.ok(AuthResponse.from(authService.loginAdmin(request.email(), request.password())));
         } catch (IllegalArgumentException error) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+    }
+
+    @PostMapping("/admin/register")
+    public ResponseEntity<AdminAccountResponse> registerAdmin(
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken,
+        @Valid @RequestBody AuthRequest request
+    ) {
+        try {
+            return ResponseEntity.status(HttpStatus.CREATED).body(AdminAccountResponse.from(authService.registerAdmin(authToken, request.name(), request.email(), request.phone(), request.password())));
+        } catch (SecurityException error) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+    }
+
+    @GetMapping("/admin/accounts")
+    public ResponseEntity<List<AdminAccountResponse>> adminAccounts(
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        try {
+            return ResponseEntity.ok(authService.listAdmins(authToken).stream().map(AdminAccountResponse::from).toList());
+        } catch (SecurityException error) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    @DeleteMapping("/admin/accounts/{adminId}")
+    public ResponseEntity<Void> deleteAdmin(
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken,
+        @PathVariable Long adminId
+    ) {
+        try {
+            authService.deleteAdmin(authToken, adminId);
+            return ResponseEntity.noContent().build();
+        } catch (SecurityException error) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.notFound().build();
         }
     }
 

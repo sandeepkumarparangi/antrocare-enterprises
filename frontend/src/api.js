@@ -27,6 +27,10 @@ async function request(path, options = {}) {
     throw new Error(`Request failed with status ${response.status}`);
   }
 
+  if (response.status === 204) {
+    return null;
+  }
+
   return response.json();
 }
 
@@ -84,13 +88,32 @@ export function loginUser(credentials) {
   });
 }
 
-export function loginAdmin(password) {
+export function loginAdmin(credentials) {
   return request("/api/auth/admin/login", {
     method: "POST",
-    body: { password }
+    body: typeof credentials === "string" ? { password: credentials } : credentials
   });
 }
 
 export function fetchCurrentSession(authToken) {
   return request("/api/auth/me", { authToken });
+}
+
+export function registerAdmin(account, authToken) {
+  return request("/api/auth/admin/register", {
+    method: "POST",
+    authToken,
+    body: account
+  });
+}
+
+export function fetchAdminAccounts(authToken) {
+  return request("/api/auth/admin/accounts", { authToken });
+}
+
+export function deleteAdminAccount(adminId, authToken) {
+  return request(`/api/auth/admin/accounts/${adminId}`, {
+    method: "DELETE",
+    authToken
+  });
 }

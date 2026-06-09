@@ -21,12 +21,13 @@ import {
   Stethoscope,
   Store,
   ShoppingCart,
+  Trash2,
   TrendingUp,
   UserCircle,
   UserPlus,
   X
 } from "lucide-react";
-import { createPurchaseRequest, fetchCategories, fetchCurrentSession, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, signupUser, updateProduct } from "./api";
+import { createPurchaseRequest, deleteAdminAccount, fetchAdminAccounts, fetchCategories, fetchCurrentSession, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, registerAdmin, signupUser, updateProduct } from "./api";
 
 const AUTH_SESSION_KEY = "antrocare-auth-session";
 const DEFAULT_COST = "₹50";
@@ -59,7 +60,9 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [view, setView] = useState("catalog");
   const [authSession, setAuthSession] = useState(readStoredSession);
-  const [adminDraftKey, setAdminDraftKey] = useState("");
+  const [adminLoginDraft, setAdminLoginDraft] = useState({ email: "", password: "" });
+  const [adminRegisterDraft, setAdminRegisterDraft] = useState({ name: "", email: "", phone: "", password: "" });
+  const [adminAccounts, setAdminAccounts] = useState([]);
   const [authMode, setAuthMode] = useState("login");
   const [userDraft, setUserDraft] = useState({ name: "", email: "", password: "" });
   const [statusMessage, setStatusMessage] = useState("");
@@ -68,16 +71,23 @@ function App() {
   const [pendingPurchaseProduct, setPendingPurchaseProduct] = useState(null);
   const [purchaseDraft, setPurchaseDraft] = useState(createEmptyPurchaseDraft);
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [installDismissed, setInstallDismissed] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = authSession?.role === "ADMIN";
+  const isAdmin = authSession?.role === "ADMIN" || authSession?.role === "MAIN_ADMIN";
+  const isMainAdmin = Boolean(authSession?.mainAdmin);
   const isUser = authSession?.role === "USER";
   const adminKey = isAdmin ? authSession.token : "";
 
   useEffect(() => {
     loadCatalog(adminKey);
   }, [adminKey]);
+
+  useEffect(() => {
+    refreshAdminAccounts();
+  }, [adminKey, isMainAdmin]);
 
   useEffect(() => {
     if (!authSession?.token) return undefined;
@@ -108,6 +118,26 @@ function App() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [previewProduct, buyingProduct]);
+
+  useEffect(() => {
+    function captureInstallPrompt(event) {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+    }
+
+    function markInstalled() {
+      setInstallPromptEvent(null);
+      setInstallDismissed(true);
+    }
+
+    window.addEventListener("beforeinstallprompt", captureInstallPrompt);
+    window.addEventListener("appinstalled", markInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", captureInstallPrompt);
+      window.removeEventListener("appinstalled", markInstalled);
+    };
+  }, []);
 
   async function loadCatalog(key = "") {
     setLoading(true);
@@ -153,15 +183,18 @@ function App() {
 
   async function handleAdminLogin(event) {
     event.preventDefault();
-    const key = adminDraftKey.trim();
-    if (!key) return;
+    const credentials = {
+      email: adminLoginDraft.email.trim(),
+      password: adminLoginDraft.password
+    };
+    if (!credentials.password) return;
     setLoading(true);
 
     try {
-      const session = await loginAdmin(key);
+      const session = await loginAdmin(credentials);
       sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
       setAuthSession(session);
-      setAdminDraftKey("");
+      setAdminLoginDraft({ email: "", password: "" });
       setStatusMessage("Admin signed in.");
       setView("admin");
     } catch (error) {
@@ -207,9 +240,18 @@ function App() {
     setUserDraft((current) => ({ ...current, [field]: value }));
   }
 
+  function updateAdminLoginDraft(field, value) {
+    setAdminLoginDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateAdminRegisterDraft(field, value) {
+    setAdminRegisterDraft((current) => ({ ...current, [field]: value }));
+  }
+
   function signOut() {
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     setAuthSession(null);
+    setAdminAccounts([]);
     setPurchaseRequests([]);
     setStockAlerts([]);
     setView("catalog");
@@ -231,6 +273,52 @@ function App() {
     }
   }
 
+  async function refreshAdminAccounts(token = adminKey) {
+    if (!isMainAdmin || !token) {
+      setAdminAccounts([]);
+      return;
+    }
+
+    try {
+      setAdminAccounts(await fetchAdminAccounts(token));
+    } catch {
+      setAdminAccounts([]);
+    }
+  }
+
+  async function handleAdminRegister(event) {
+    event.preventDefault();
+    if (!isMainAdmin || !adminKey) return;
+
+    try {
+      const account = await registerAdmin({
+        name: adminRegisterDraft.name.trim(),
+        email: adminRegisterDraft.email.trim(),
+        phone: adminRegisterDraft.phone.trim(),
+        password: adminRegisterDraft.password
+      }, adminKey);
+      setAdminAccounts((current) => [account, ...current.filter((item) => item.id !== account.id)]);
+      setAdminRegisterDraft({ name: "", email: "", phone: "", password: "" });
+      setStatusMessage(`${account.name} was added as an admin.`);
+    } catch {
+      setStatusMessage("Admin registration failed. Use a new email and a strong password.");
+    }
+  }
+
+  async function handleDeleteAdmin(account) {
+    if (!isMainAdmin || !adminKey) return;
+    const shouldDelete = window.confirm(`Delete admin access for ${account.name}?`);
+    if (!shouldDelete) return;
+
+    try {
+      await deleteAdminAccount(account.id, adminKey);
+      setAdminAccounts((current) => current.filter((item) => item.id !== account.id));
+      setStatusMessage(`${account.name} was removed from admin access.`);
+    } catch {
+      setStatusMessage("Could not delete that admin account.");
+    }
+  }
+
   function openPurchaseModal(product) {
     if (!authSession?.token) {
       setPendingPurchaseProduct(product);
@@ -248,6 +336,14 @@ function App() {
 
   function updatePurchaseDraft(field, value) {
     setPurchaseDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  async function installMobileApp() {
+    if (!installPromptEvent) return;
+    installPromptEvent.prompt();
+    await installPromptEvent.userChoice.catch(() => null);
+    setInstallPromptEvent(null);
+    setInstallDismissed(true);
   }
 
   async function submitPurchaseRequest(event) {
@@ -309,7 +405,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-mist text-ink">
+    <div className="app-shell min-h-screen text-ink">
       <Header view={view} setView={setView} authSession={authSession} isAdmin={isAdmin} isUser={isUser} onHeightChange={setHeaderHeight} onSignOut={signOut} />
 
       {view === "catalog" ? (
@@ -345,10 +441,16 @@ function App() {
           setSelectedCategory={setSelectedCategory}
           query={query}
           setQuery={setQuery}
-          adminDraftKey={adminDraftKey}
-          setAdminDraftKey={setAdminDraftKey}
+          adminLoginDraft={adminLoginDraft}
+          updateAdminLoginDraft={updateAdminLoginDraft}
+          adminRegisterDraft={adminRegisterDraft}
+          updateAdminRegisterDraft={updateAdminRegisterDraft}
+          adminAccounts={adminAccounts}
           isAdmin={isAdmin}
+          isMainAdmin={isMainAdmin}
           onLogin={handleAdminLogin}
+          onRegisterAdmin={handleAdminRegister}
+          onDeleteAdmin={handleDeleteAdmin}
           onSignOut={signOut}
           onLocalChange={updateLocalProduct}
           onSave={saveProduct}
@@ -369,6 +471,10 @@ function App() {
           onSubmit={submitPurchaseRequest}
           submitting={purchaseSubmitting}
         />
+      ) : null}
+      <MobileNav view={view} setView={setView} authSession={authSession} isAdmin={isAdmin} isUser={isUser} />
+      {installPromptEvent && !installDismissed ? (
+        <InstallAppBanner onInstall={installMobileApp} onClose={() => setInstallDismissed(true)} />
       ) : null}
       <ContactSection />
     </div>
@@ -397,13 +503,13 @@ function Header({ view, setView, authSession, isAdmin, isUser, onHeightChange, o
   }, [onHeightChange]);
 
   return (
-    <header ref={headerRef} className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 px-4 py-3 backdrop-blur-xl lg:px-10">
+    <header ref={headerRef} className="app-header">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <button className="flex items-center gap-3 text-left" onClick={() => setView("catalog")}>
           <AceLogoMark />
           <span>
             <span className="block text-lg font-black">Antrocare Enterprises</span>
-            <span className="block text-sm font-semibold text-slate-500">Orthopaedic, compression and rehab products</span>
+            <span className="block text-sm font-semibold text-slate-500">Orthopaedic care catalog and inventory</span>
           </span>
         </button>
 
@@ -449,6 +555,53 @@ function NavButton({ active, onClick, icon: Icon, label }) {
   );
 }
 
+function MobileNav({ view, setView, authSession, isAdmin, isUser }) {
+  return (
+    <nav className="mobile-tabbar" aria-label="Mobile navigation">
+      <MobileNavButton active={view === "catalog"} onClick={() => setView("catalog")} icon={Store} label="Catalog" />
+      <MobileNavButton active={view === "account"} onClick={() => setView("account")} icon={isUser ? UserCircle : UserPlus} label={authSession ? "Account" : "Login"} />
+      {(isAdmin || !isUser) ? (
+        <MobileNavButton active={view === "admin"} onClick={() => setView("admin")} icon={ShieldCheck} label="Admin" />
+      ) : null}
+      <a className="mobile-tabbar-button" href="#contact">
+        <Mail size={19} />
+        <span>Contact</span>
+      </a>
+    </nav>
+  );
+}
+
+function MobileNavButton({ active, onClick, icon: Icon, label }) {
+  return (
+    <button className={`mobile-tabbar-button ${active ? "mobile-tabbar-button-active" : ""}`} onClick={onClick} type="button">
+      <Icon size={19} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function InstallAppBanner({ onInstall, onClose }) {
+  return (
+    <aside className="mobile-install-banner" aria-label="Install mobile app">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-emerald-50 text-clinical">
+          <Store size={21} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-black text-ink">Install Antrocare</p>
+          <p className="truncate text-xs font-bold text-slate-500">Use it like a mobile app from your home screen.</p>
+        </div>
+      </div>
+      <div className="ml-auto flex items-center gap-2">
+        <button className="rounded-md bg-ink px-3 py-2 text-xs font-black text-white" type="button" onClick={onInstall}>Install</button>
+        <button className="rounded-md p-2 text-slate-500 hover:bg-slate-100" type="button" onClick={onClose} aria-label="Dismiss install prompt">
+          <X size={16} />
+        </button>
+      </div>
+    </aside>
+  );
+}
+
 function CatalogPage(props) {
   return (
     <main>
@@ -461,42 +614,44 @@ function CatalogPage(props) {
 
 function Hero({ summary }) {
   return (
-    <section className="relative overflow-hidden bg-white">
-      <div
-        className="absolute inset-0 bg-cover bg-center opacity-10"
-        style={{ backgroundImage: `url(${mediaUrl("/rendered/page-02.png")})` }}
-      />
-      <div className="relative mx-auto grid min-h-[calc(100vh-80px)] max-w-7xl items-center gap-10 px-4 py-12 lg:grid-cols-[1.05fr_.95fr] lg:px-10">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-clinical">
-            <Sparkles size={16} />
-            Modern medical product catalog
+    <section className="hero-panel">
+      <div className="hero-grid">
+        <div className="hero-copy-panel">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-clinical shadow-sm">
+              <Sparkles size={16} />
+              Modern care catalog
+            </div>
+            <h1 className="mt-4 max-w-4xl text-3xl font-black leading-[1.04] tracking-tight text-ink sm:text-4xl md:text-5xl">
+              Orthopaedic products, stock, and customer requests in one place.
+            </h1>
+            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
+              Browse care products with clear photos, live availability, mobile-friendly buying, and admin tools for inventory and sales.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <a className="btn-primary" href="#products">
+                <Search size={19} />
+                Search catalog
+              </a>
+              <a className="btn-secondary" href="tel:+919444065691">
+                <Phone size={19} />
+                Call for quote
+              </a>
+            </div>
           </div>
-          <h1 className="mt-5 max-w-3xl text-5xl font-black leading-[.95] tracking-tight text-ink md:text-7xl">
-            Clinical support, simplified for modern care.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-            Explore Antrocare's orthopaedic, compression, and rehabilitation range through a clean digital catalog built for quick discovery, clear visuals, and quote-ready decisions.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a className="btn-primary" href="#products">
-              <Search size={19} />
-              Browse products
-            </a>
-            <a className="btn-secondary" href="tel:+919444065691">
-              <Phone size={19} />
-              Call for quote
-            </a>
-          </div>
-        </div>
-        <div className="grid gap-4">
-          <div className="rounded-lg border border-white/80 bg-white/85 p-3 shadow-soft backdrop-blur">
-            <img className="aspect-[.76] w-full rounded-md object-cover" src={mediaUrl("/rendered/page-01.png")} alt="Antrocare brochure cover" />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="mt-4 grid grid-cols-3 gap-3">
             <Metric icon={Boxes} label="Products" value={summary.totalProducts} />
             <Metric icon={ClipboardList} label="Categories" value={summary.categories} />
             <Metric icon={CheckCircle2} label="Active" value={summary.activeProducts} />
+          </div>
+        </div>
+        <div className="hero-media-panel">
+          <div className="relative">
+            <img src={mediaUrl("/rendered/page-01.png")} alt="Antrocare brochure cover" />
+            <div className="absolute inset-x-4 bottom-4 rounded-lg border border-white/70 bg-white/95 p-4 shadow-lg backdrop-blur">
+              <p className="text-xs font-black uppercase text-slate-500">Live catalog</p>
+              <p className="mt-1 text-lg font-black text-ink">A cleaner storefront with mobile access and real inventory signals.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -506,7 +661,7 @@ function Hero({ summary }) {
 
 function Metric({ icon: Icon, label, value }) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 md:p-4">
       <Icon className="text-clinical" size={20} />
       <strong className="mt-3 block text-2xl font-black">{value}</strong>
       <span className="text-xs font-bold uppercase text-slate-500">{label}</span>
@@ -518,14 +673,14 @@ function CatalogControls({ categories, categoryCounts, selectedCategory, setSele
   return (
     <section
       id="products"
-      className="sticky z-30 border-b border-slate-200/80 bg-mist/95 px-4 py-4 shadow-sm backdrop-blur-xl lg:px-10"
+      className="control-dock"
       style={{ top: headerHeight, scrollMarginTop: headerHeight + 16 }}
     >
       <div className="mx-auto max-w-7xl">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] lg:items-center">
           <div className="min-w-0">
             <p className="eyebrow">Product catalog</p>
-            <h2 className="mt-1 text-xl font-black leading-tight tracking-tight md:text-2xl">Search by treatment area, support type, or name.</h2>
+            <h2 className="mt-1 text-xl font-black leading-tight tracking-tight md:text-2xl">Search by treatment area, support type, or product name.</h2>
           </div>
           <label className="relative block w-full">
             <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
@@ -577,6 +732,11 @@ function ProductCard({ product, onPreview, onBuy }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
   const availableStock = Number(product.stockQuantity) || 0;
+  const stockClass = availableStock === 0
+    ? "bg-rose-50 text-rose-700"
+    : availableStock < 5
+      ? "bg-amber-50 text-amber-700"
+      : "bg-emerald-50 text-clinical";
 
   return (
     <article className="product-card group">
@@ -587,18 +747,17 @@ function ProductCard({ product, onPreview, onBuy }) {
         </span>
       </button>
       <div className="p-5">
-        <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="status-chip bg-emerald-50 text-clinical">{product.category}</span>
+          <span className={`stock-chip ${stockClass}`}>{availableStock} stock</span>
+        </div>
         <h3 className="mt-4 min-h-14 text-xl font-black leading-tight">{product.name}</h3>
         {product.useDescription ? (
           <p className="mt-3 min-h-12 text-sm font-semibold leading-6 text-slate-600">{product.useDescription}</p>
         ) : null}
         <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
           <span className="text-xs font-black uppercase text-slate-500">Cost</span>
-          <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
-        </div>
-        <div className="mt-3 flex items-center justify-between text-sm font-black">
-          <span className="text-slate-500">Available</span>
-          <span className={availableStock < 5 ? "text-amber-700" : "text-clinical"}>{availableStock} in stock</span>
+          <strong className={`rounded-md px-2.5 py-1 ${product.cost === DEFAULT_COST ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-ocean"}`}>{product.cost}</strong>
         </div>
         <button className="btn-primary mt-4 w-full min-h-11" type="button" onClick={() => onBuy(product)} disabled={availableStock === 0}>
           <ShoppingCart size={18} />
@@ -654,8 +813,8 @@ function formatRevenue(product) {
 function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubmit, authSession, onSignOut }) {
   if (authSession) {
     return (
-      <main className="grid min-h-[calc(100vh-80px)] place-items-center bg-white px-4 py-12">
-        <section className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-8 shadow-soft">
+      <main className="grid min-h-[calc(100vh-80px)] place-items-center px-4 py-12">
+        <section className="surface-panel-padded w-full max-w-xl">
           <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-50 text-clinical">
             <UserCircle size={28} />
           </div>
@@ -679,8 +838,8 @@ function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubm
   const isSignup = authMode === "signup";
 
   return (
-    <main className="grid min-h-[calc(100vh-80px)] place-items-center bg-white px-4 py-12">
-      <form className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-8 shadow-soft" onSubmit={onSubmit}>
+    <main className="grid min-h-[calc(100vh-80px)] place-items-center px-4 py-12">
+      <form className="surface-panel-padded w-full max-w-xl" onSubmit={onSubmit}>
         <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-50 text-clinical">
           {isSignup ? <UserPlus size={28} /> : <UserCircle size={28} />}
         </div>
@@ -721,10 +880,25 @@ function AdminPage(props) {
   }
 
   const salesProducts = [...props.products].sort((a, b) => (Number(b.unitsSold) || 0) - (Number(a.unitsSold) || 0));
+  const totalProducts = Math.max(1, Number(props.summary.totalProducts) || props.products.length || 1);
+  const activeProducts = Number(props.summary.activeProducts) || props.products.filter((product) => product.status === "Active").length;
+  const hiddenProducts = Math.max(0, totalProducts - activeProducts);
+  const outOfStockProducts = props.products.filter((product) => (Number(product.stockQuantity) || 0) === 0).length;
+  const lowStockProducts = Number(props.summary.lowStockProducts) || props.stockAlerts.length;
+  const healthyProducts = Math.max(0, totalProducts - lowStockProducts - outOfStockProducts);
+  const totalStock = props.products.reduce((sum, product) => sum + (Number(product.stockQuantity) || 0), 0);
+  const totalSold = Number(props.summary.totalUnitsSold) || 0;
+  const inventoryMovementTotal = Math.max(1, totalStock + totalSold);
+  const activePercent = Math.round((activeProducts / totalProducts) * 100);
+  const movementPercent = Math.round((totalSold / inventoryMovementTotal) * 100);
+  const categoryRows = Object.entries(props.products.reduce((acc, product) => {
+    acc[product.category] = (acc[product.category] || 0) + 1;
+    return acc;
+  }, {})).sort(([, left], [, right]) => right - left).slice(0, 7);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-12 lg:px-10">
-      <section className="grid gap-6 rounded-lg bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-6 text-white shadow-soft lg:grid-cols-[1fr_420px] lg:p-8">
+      <section className="grid gap-6 rounded-lg bg-gradient-to-br from-ink via-ocean to-clinical p-6 text-white shadow-soft lg:grid-cols-[1fr_420px] lg:p-8">
         <div>
           <p className="eyebrow text-emerald-200">Admin console</p>
           <h1 className="max-w-3xl text-4xl font-black leading-tight md:text-6xl">Manage pricing, visibility, and catalog freshness.</h1>
@@ -742,7 +916,52 @@ function AdminPage(props) {
         </div>
       </section>
 
-      <section className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+      <section className="admin-graph-shell mt-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="eyebrow">Dashboard overview</p>
+            <h2 className="mt-1 text-3xl font-black leading-tight">Graphical inventory and sales summary.</h2>
+          </div>
+          <span className="rounded-md bg-white px-3 py-2 text-sm font-black text-ocean shadow-sm">{props.purchaseRequests.length} buy requests</span>
+        </div>
+
+        <div className="mt-6 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
+            <DashboardGauge
+              label="Active catalog"
+              value={`${activePercent}%`}
+              detail={`${activeProducts} active / ${hiddenProducts} hidden`}
+              percent={activePercent}
+              color="#0f8a78"
+            />
+            <DashboardGauge
+              label="Sales movement"
+              value={`${movementPercent}%`}
+              detail={`${totalSold} sold / ${totalStock} in stock`}
+              percent={movementPercent}
+              color="#236a9f"
+            />
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <StockStatusChart healthy={healthyProducts} low={lowStockProducts} out={outOfStockProducts} total={totalProducts} />
+            <SalesBarChart products={salesProducts} />
+            <CategoryMixChart rows={categoryRows} total={totalProducts} />
+          </div>
+        </div>
+      </section>
+
+      {props.isMainAdmin ? (
+        <AdminAccessPanel
+          draft={props.adminRegisterDraft}
+          updateDraft={props.updateAdminRegisterDraft}
+          onSubmit={props.onRegisterAdmin}
+          onDeleteAdmin={props.onDeleteAdmin}
+          adminAccounts={props.adminAccounts}
+        />
+      ) : null}
+
+      <section className="mt-8 rounded-lg border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-orange-50 p-4 shadow-lg shadow-amber-900/5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="eyebrow text-amber-700">Stock alerts</p>
@@ -770,7 +989,7 @@ function AdminPage(props) {
         )}
       </section>
 
-      <section className="mt-8 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="surface-panel-padded mt-8">
         <div className="grid gap-3 lg:grid-cols-[1fr_260px_auto]">
           <label className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
@@ -842,7 +1061,7 @@ function AdminPage(props) {
         </div>
       </section>
 
-      <section className="mt-8 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="surface-panel-padded mt-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="eyebrow">Sales dashboard</p>
@@ -879,7 +1098,7 @@ function AdminPage(props) {
         </div>
       </section>
 
-      <section className="mt-8 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="surface-panel-padded mt-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="eyebrow">Buy requests</p>
@@ -932,19 +1151,222 @@ function AdminPage(props) {
   );
 }
 
-function AdminLogin({ adminDraftKey, setAdminDraftKey, onLogin }) {
+function AdminAccessPanel({ draft, updateDraft, onSubmit, adminAccounts, onDeleteAdmin }) {
   return (
-    <main className="grid min-h-[calc(100vh-80px)] place-items-center bg-white px-4 py-12">
-      <form className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-8 shadow-soft" onSubmit={onLogin}>
+    <section className="surface-panel-padded mt-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="eyebrow">Main admin only</p>
+          <h2 className="mt-1 text-2xl font-black">Create admin accounts.</h2>
+          <p className="mt-2 max-w-2xl font-semibold leading-7 text-slate-600">
+            Add trusted admins who can manage products, stock, sales, and buy requests. This panel is hidden from regular admin logins.
+          </p>
+        </div>
+        <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-black text-clinical">{adminAccounts.length} registered admins</span>
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[420px_minmax(0,1fr)]">
+        <form className="rounded-lg border border-slate-100 bg-slate-50/70 p-4" onSubmit={onSubmit}>
+          <label className="block">
+            <span className="mb-2 block text-sm font-black text-slate-500">Admin name</span>
+            <input className="field" value={draft.name} onChange={(event) => updateDraft("name", event.target.value)} required />
+          </label>
+          <label className="mt-4 block">
+            <span className="mb-2 block text-sm font-black text-slate-500">Admin email</span>
+            <input className="field" type="email" value={draft.email} onChange={(event) => updateDraft("email", event.target.value)} required />
+          </label>
+          <label className="mt-4 block">
+            <span className="mb-2 block text-sm font-black text-slate-500">Admin phone</span>
+            <input className="field" type="tel" value={draft.phone} onChange={(event) => updateDraft("phone", event.target.value)} required />
+          </label>
+          <label className="mt-4 block">
+            <span className="mb-2 block text-sm font-black text-slate-500">Temporary password</span>
+            <input className="field" type="password" minLength="6" value={draft.password} onChange={(event) => updateDraft("password", event.target.value)} required />
+          </label>
+          <button className="btn-primary mt-5 w-full" type="submit">
+            <ShieldCheck size={18} />
+            Add admin
+          </button>
+        </form>
+
+        <div className="overflow-auto rounded-lg border border-slate-100 bg-white">
+          {adminAccounts.length ? (
+            <table className="w-full min-w-[560px] border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                  <th className="table-cell">Admin</th>
+                  <th className="table-cell">Email</th>
+                  <th className="table-cell">Phone</th>
+                  <th className="table-cell">Created</th>
+                  <th className="table-cell">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adminAccounts.map((account) => (
+                  <tr className="border-t border-slate-100" key={account.id}>
+                    <td className="table-cell font-black">{account.name}</td>
+                    <td className="table-cell font-semibold text-slate-600">{account.email}</td>
+                    <td className="table-cell font-semibold text-slate-600">{account.phone}</td>
+                    <td className="table-cell font-bold text-slate-500">{formatRequestTime(account.createdAt)}</td>
+                    <td className="table-cell">
+                      <button className="btn-danger min-h-10" type="button" onClick={() => onDeleteAdmin(account)}>
+                        <Trash2 size={17} />
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-panel min-h-56">No registered admins yet.</div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DashboardGauge({ label, value, detail, percent, color }) {
+  const safePercent = Math.max(0, Math.min(100, percent));
+
+  return (
+    <article className="graph-card">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black uppercase text-slate-500">{label}</p>
+          <strong className="mt-2 block text-4xl font-black text-ink">{value}</strong>
+          <p className="mt-2 text-sm font-bold text-slate-500">{detail}</p>
+        </div>
+        <div
+          className="dashboard-gauge"
+          style={{ "--gauge-color": color, "--gauge-percent": `${safePercent}%` }}
+          aria-label={`${label} ${safePercent}%`}
+        >
+          <span>{safePercent}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function StockStatusChart({ healthy, low, out, total }) {
+  const rows = [
+    { label: "Healthy stock", value: healthy, color: "bg-clinical" },
+    { label: "Low stock", value: low, color: "bg-gold" },
+    { label: "Out of stock", value: out, color: "bg-coral" }
+  ];
+
+  return (
+    <article className="graph-card">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black uppercase text-slate-500">Stock status</p>
+          <h3 className="mt-2 text-2xl font-black text-ink">Availability breakdown</h3>
+        </div>
+        <Boxes className="text-clinical" size={26} />
+      </div>
+      <div className="mt-6 grid gap-4">
+        {rows.map((row) => (
+          <DashboardBar key={row.label} label={row.label} value={row.value} max={total} colorClass={row.color} />
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function SalesBarChart({ products }) {
+  const chartProducts = products.filter((product) => (Number(product.unitsSold) || 0) > 0).slice(0, 6);
+  const rows = chartProducts.length ? chartProducts : products.slice(0, 6);
+  const maxUnits = Math.max(1, ...rows.map((product) => Number(product.unitsSold) || 0));
+
+  return (
+    <article className="graph-card">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black uppercase text-slate-500">Sales graph</p>
+          <h3 className="mt-2 text-2xl font-black text-ink">Top product movement</h3>
+        </div>
+        <TrendingUp className="text-ocean" size={26} />
+      </div>
+      <div className="mt-6 grid gap-4">
+        {rows.length ? rows.map((product) => (
+          <DashboardBar
+            key={product.id}
+            label={product.name}
+            value={Number(product.unitsSold) || 0}
+            max={maxUnits}
+            colorClass="bg-ocean"
+          />
+        )) : (
+          <div className="rounded-lg border border-dashed border-slate-200 p-5 text-sm font-bold text-slate-500">No product movement yet.</div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function CategoryMixChart({ rows, total }) {
+  const maxCount = Math.max(1, ...rows.map(([, count]) => Number(count) || 0));
+
+  return (
+    <article className="graph-card lg:col-span-2">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black uppercase text-slate-500">Category graph</p>
+          <h3 className="mt-2 text-2xl font-black text-ink">Product distribution</h3>
+        </div>
+        <ClipboardList className="text-coral" size={26} />
+      </div>
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        {rows.map(([category, count]) => (
+          <DashboardBar
+            key={category}
+            label={category}
+            value={`${count} / ${total}`}
+            max={maxCount}
+            rawValue={count}
+            colorClass="bg-coral"
+          />
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function DashboardBar({ label, value, max, colorClass, rawValue = value }) {
+  const width = `${Math.max(4, Math.round((Number(rawValue) || 0) / Math.max(1, max) * 100))}%`;
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+        <span className="min-w-0 truncate font-black text-ink">{label}</span>
+        <span className="shrink-0 font-black text-slate-500">{value}</span>
+      </div>
+      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${colorClass}`} style={{ width }} />
+      </div>
+    </div>
+  );
+}
+
+function AdminLogin({ adminLoginDraft, updateAdminLoginDraft, onLogin }) {
+  return (
+    <main className="grid min-h-[calc(100vh-80px)] place-items-center px-4 py-12">
+      <form className="surface-panel-padded w-full max-w-xl" onSubmit={onLogin}>
         <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-lg bg-slate-950 text-white">
           <LockKeyhole size={26} />
         </div>
         <p className="eyebrow">Admin access</p>
         <h1 className="text-4xl font-black leading-tight">Sign in to manage products.</h1>
-        <p className="mt-3 leading-7 text-slate-600">Regular users can browse the catalog only. Pricing and visibility controls are available after admin login.</p>
+        <p className="mt-3 leading-7 text-slate-600">Use the main admin passcode, or login with a registered admin email and password.</p>
         <label className="mt-6 block">
-          <span className="mb-2 block text-sm font-black text-slate-500">Passcode</span>
-          <input className="field" type="password" value={adminDraftKey} onChange={(event) => setAdminDraftKey(event.target.value)} placeholder="Enter admin passcode" />
+          <span className="mb-2 block text-sm font-black text-slate-500">Registered admin email</span>
+          <input className="field" type="email" value={adminLoginDraft.email} onChange={(event) => updateAdminLoginDraft("email", event.target.value)} placeholder="Leave blank for main admin" />
+        </label>
+        <label className="mt-6 block">
+          <span className="mb-2 block text-sm font-black text-slate-500">Password / main passcode</span>
+          <input className="field" type="password" value={adminLoginDraft.password} onChange={(event) => updateAdminLoginDraft("password", event.target.value)} placeholder="Enter password" />
         </label>
         <button className="btn-primary mt-5 w-full" type="submit">
           <ShieldCheck size={19} />
@@ -1076,7 +1498,7 @@ function PurchaseModal({ product, draft, onChange, onClose, onSubmit, submitting
 
 function ContactSection() {
   return (
-    <footer id="contact" className="bg-slate-950 px-4 py-12 text-white lg:px-10">
+    <footer id="contact" className="bg-gradient-to-br from-ink via-slate-950 to-clinical px-4 py-12 text-white lg:px-10">
       <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_1.2fr]">
         <div>
           <p className="eyebrow text-emerald-200">Contact</p>
@@ -1108,7 +1530,7 @@ function ContactLink({ icon: Icon, label, href }) {
 
 function Toast({ message, onClose }) {
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex max-w-md items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 font-bold shadow-soft">
+    <div className="toast-panel">
       <Stethoscope className="text-clinical" size={22} />
       <span>{message}</span>
       <button className="ml-2 rounded-md p-1 hover:bg-slate-100" onClick={onClose} type="button" aria-label="Close message">
