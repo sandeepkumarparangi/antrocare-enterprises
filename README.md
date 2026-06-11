@@ -65,6 +65,8 @@ admin123
 
 Users can browse active products after signing up or logging in. Buying a product requires a user session. Admins can update product costs, stock, visibility, and review saved buy requests. Products start at `₹50` with stock tracking enabled.
 
+Main admin controls approval. Product changes submitted by registered admins are saved as pending requests and do not update the live catalog until the main admin approves them. The main admin can approve or reject those requests from the admin dashboard.
+
 The main admin can sign in by leaving the admin email blank and entering the main passcode. Only the main admin can create more admins. New admins are created with name, email, phone number, and password, then they can sign in with their email and password.
 
 ## Local Email Alerts

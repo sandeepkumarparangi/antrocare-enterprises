@@ -27,7 +27,7 @@ import {
   UserPlus,
   X
 } from "lucide-react";
-import { createPurchaseRequest, deleteAdminAccount, fetchAdminAccounts, fetchCategories, fetchCurrentSession, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, registerAdmin, signupUser, updateProduct } from "./api";
+import { approveProductChange, createPurchaseRequest, deleteAdminAccount, fetchAdminAccounts, fetchCategories, fetchCurrentSession, fetchProductChangeRequests, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, registerAdmin, rejectProductChange, signupUser, updateProduct } from "./api";
 
 const AUTH_SESSION_KEY = "antrocare-auth-session";
 const DEFAULT_COST = "₹50";
@@ -56,6 +56,7 @@ function App() {
   const [summary, setSummary] = useState({ totalProducts: 0, activeProducts: 0, pricedProducts: 0, categories: 0, purchaseRequests: 0, totalUnitsSold: 0, lowStockProducts: 0 });
   const [purchaseRequests, setPurchaseRequests] = useState([]);
   const [stockAlerts, setStockAlerts] = useState([]);
+  const [productChangeRequests, setProductChangeRequests] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [view, setView] = useState("catalog");
@@ -87,6 +88,7 @@ function App() {
 
   useEffect(() => {
     refreshAdminAccounts();
+    refreshProductChangeRequests();
   }, [adminKey, isMainAdmin]);
 
   useEffect(() => {
@@ -252,6 +254,7 @@ function App() {
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     setAuthSession(null);
     setAdminAccounts([]);
+    setProductChangeRequests([]);
     setPurchaseRequests([]);
     setStockAlerts([]);
     setView("catalog");
@@ -267,7 +270,11 @@ function App() {
       setProducts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setSummary(await fetchSummary());
       setStockAlerts(await fetchStockAlerts(adminKey));
-      setStatusMessage(`${updated.name} updated.`);
+      if (isMainAdmin) {
+        setStatusMessage(`${updated.name} updated.`);
+      } else {
+        setStatusMessage(`${updated.name} was sent to the main admin for approval.`);
+      }
     } catch (error) {
       setStatusMessage("Admin update failed. Check the passcode and backend server.");
     }
@@ -283,6 +290,19 @@ function App() {
       setAdminAccounts(await fetchAdminAccounts(token));
     } catch {
       setAdminAccounts([]);
+    }
+  }
+
+  async function refreshProductChangeRequests(token = adminKey) {
+    if (!isMainAdmin || !token) {
+      setProductChangeRequests([]);
+      return;
+    }
+
+    try {
+      setProductChangeRequests(await fetchProductChangeRequests(token));
+    } catch {
+      setProductChangeRequests([]);
     }
   }
 
@@ -316,6 +336,33 @@ function App() {
       setStatusMessage(`${account.name} was removed from admin access.`);
     } catch {
       setStatusMessage("Could not delete that admin account.");
+    }
+  }
+
+  async function handleReviewProductChange(change, decision) {
+    if (!isMainAdmin || !adminKey) return;
+
+    try {
+      if (decision === "approve") {
+        await approveProductChange(change.id, adminKey);
+        setStatusMessage(`Approved ${change.productName}.`);
+      } else {
+        await rejectProductChange(change.id, adminKey);
+        setStatusMessage(`Rejected ${change.productName}.`);
+      }
+
+      const [productData, summaryData, stockAlertData, changeData] = await Promise.all([
+        fetchProducts(adminKey),
+        fetchSummary(),
+        fetchStockAlerts(adminKey),
+        fetchProductChangeRequests(adminKey)
+      ]);
+      setProducts(productData);
+      setSummary(summaryData);
+      setStockAlerts(stockAlertData);
+      setProductChangeRequests(changeData);
+    } catch {
+      setStatusMessage("Could not review that product change.");
     }
   }
 
@@ -446,11 +493,13 @@ function App() {
           adminRegisterDraft={adminRegisterDraft}
           updateAdminRegisterDraft={updateAdminRegisterDraft}
           adminAccounts={adminAccounts}
+          productChangeRequests={productChangeRequests}
           isAdmin={isAdmin}
           isMainAdmin={isMainAdmin}
           onLogin={handleAdminLogin}
           onRegisterAdmin={handleAdminRegister}
           onDeleteAdmin={handleDeleteAdmin}
+          onReviewProductChange={handleReviewProductChange}
           onSignOut={signOut}
           onLocalChange={updateLocalProduct}
           onSave={saveProduct}
@@ -913,6 +962,7 @@ function AdminPage(props) {
           <Metric icon={PackageCheck} label="Buy requests" value={props.summary.purchaseRequests} />
           <Metric icon={TrendingUp} label="Units sold" value={props.summary.totalUnitsSold} />
           <Metric icon={AlertTriangle} label="Low stock" value={props.summary.lowStockProducts} />
+          {props.isMainAdmin ? <Metric icon={ShieldCheck} label="Pending approvals" value={props.productChangeRequests.length} /> : null}
         </div>
       </section>
 
@@ -952,13 +1002,16 @@ function AdminPage(props) {
       </section>
 
       {props.isMainAdmin ? (
-        <AdminAccessPanel
-          draft={props.adminRegisterDraft}
-          updateDraft={props.updateAdminRegisterDraft}
-          onSubmit={props.onRegisterAdmin}
-          onDeleteAdmin={props.onDeleteAdmin}
-          adminAccounts={props.adminAccounts}
-        />
+        <>
+          <ProductApprovalPanel changes={props.productChangeRequests} onReview={props.onReviewProductChange} />
+          <AdminAccessPanel
+            draft={props.adminRegisterDraft}
+            updateDraft={props.updateAdminRegisterDraft}
+            onSubmit={props.onRegisterAdmin}
+            onDeleteAdmin={props.onDeleteAdmin}
+            adminAccounts={props.adminAccounts}
+          />
+        </>
       ) : null}
 
       <section className="mt-8 rounded-lg border border-amber-200 bg-gradient-to-r from-amber-50 via-white to-orange-50 p-4 shadow-lg shadow-amber-900/5">
@@ -1148,6 +1201,75 @@ function AdminPage(props) {
         </div>
       </section>
     </main>
+  );
+}
+
+function ProductApprovalPanel({ changes, onReview }) {
+  return (
+    <section className="surface-panel-padded mt-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="eyebrow">Main admin approval</p>
+          <h2 className="mt-1 text-2xl font-black">Review admin product changes before publishing.</h2>
+          <p className="mt-2 max-w-2xl font-semibold leading-7 text-slate-600">
+            Changes submitted by other admins stay pending here. They affect the public catalog only after main admin approval.
+          </p>
+        </div>
+        <span className="rounded-md bg-amber-50 px-3 py-2 text-sm font-black text-amber-700">{changes.length} pending</span>
+      </div>
+
+      <div className="mt-5 grid gap-4">
+        {changes.length ? changes.map((change) => (
+          <article className="rounded-lg border border-amber-100 bg-white p-4 shadow-sm" key={change.id}>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-black text-ink">{change.productName}</h3>
+                <p className="mt-1 text-sm font-bold text-slate-500">{change.productCategory}</p>
+                <p className="mt-2 text-sm font-semibold text-slate-500">
+                  Requested by <span className="font-black text-ink">{change.requestedByName}</span> ({change.requestedByEmail}) on {formatRequestTime(change.createdAt)}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button className="btn-primary min-h-10" type="button" onClick={() => onReview(change, "approve")}>
+                  <CheckCircle2 size={17} />
+                  Approve
+                </button>
+                <button className="btn-danger min-h-10" type="button" onClick={() => onReview(change, "reject")}>
+                  <X size={17} />
+                  Reject
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <ChangeCompare label="Cost" current={change.currentCost} requested={change.requestedCost} />
+              <ChangeCompare label="Stock" current={change.currentStockQuantity} requested={change.requestedStockQuantity} />
+              <ChangeCompare label="Status" current={change.currentStatus} requested={change.requestedStatus} />
+            </div>
+          </article>
+        )) : (
+          <div className="empty-panel min-h-48">No pending product changes.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ChangeCompare({ label, current, requested }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-4">
+      <p className="text-xs font-black uppercase text-slate-500">{label}</p>
+      <div className="mt-3 grid gap-2 text-sm">
+        <div>
+          <span className="block font-bold text-slate-500">Current</span>
+          <strong className="text-ink">{current}</strong>
+        </div>
+        <div>
+          <span className="block font-bold text-slate-500">Requested</span>
+          <strong className="text-clinical">{requested}</strong>
+        </div>
+      </div>
+    </div>
   );
 }
 

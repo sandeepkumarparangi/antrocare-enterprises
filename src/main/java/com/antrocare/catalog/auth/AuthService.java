@@ -122,7 +122,7 @@ public class AuthService {
     }
 
     public boolean isAdmin(String legacyAdminKey, String authToken) {
-        if (constantTimeEquals(adminKey, legacyAdminKey == null ? "" : legacyAdminKey.trim())) {
+        if (isLegacyMainAdminKey(legacyAdminKey)) {
             return true;
         }
 
@@ -136,6 +136,10 @@ public class AuthService {
         return findValidSession(authToken)
             .filter(AuthSession::isMainAdmin)
             .isPresent();
+    }
+
+    public boolean isLegacyMainAdminKey(String legacyAdminKey) {
+        return constantTimeEquals(adminKey, legacyAdminKey == null ? "" : legacyAdminKey.trim());
     }
 
     private AuthSession createSession(String email, String displayName, String role) {

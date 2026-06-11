@@ -54,6 +54,24 @@ export function fetchStockAlerts(adminKey) {
   return request("/api/stock-alerts", { adminKey });
 }
 
+export function fetchProductChangeRequests(authToken) {
+  return request("/api/product-change-requests", { authToken });
+}
+
+export function approveProductChange(changeId, authToken) {
+  return request(`/api/product-change-requests/${changeId}/approve`, {
+    method: "POST",
+    authToken
+  });
+}
+
+export function rejectProductChange(changeId, authToken) {
+  return request(`/api/product-change-requests/${changeId}/reject`, {
+    method: "POST",
+    authToken
+  });
+}
+
 export function createPurchaseRequest(purchaseRequest, authToken) {
   return request("/api/purchase-requests", {
     method: "POST",

@@ -29,17 +29,20 @@ public class ProductController {
 
     private final ProductRepository productRepository;
     private final PurchaseRequestRepository purchaseRequestRepository;
+    private final ProductChangeRequestRepository productChangeRequestRepository;
     private final LowStockAlertService lowStockAlertService;
     private final AuthService authService;
 
     public ProductController(
         ProductRepository productRepository,
         PurchaseRequestRepository purchaseRequestRepository,
+        ProductChangeRequestRepository productChangeRequestRepository,
         LowStockAlertService lowStockAlertService,
         AuthService authService
     ) {
         this.productRepository = productRepository;
         this.purchaseRequestRepository = purchaseRequestRepository;
+        this.productChangeRequestRepository = productChangeRequestRepository;
         this.lowStockAlertService = lowStockAlertService;
         this.authService = authService;
     }
@@ -140,6 +143,7 @@ public class ProductController {
     }
 
     @PatchMapping("/products/{id}")
+    @Transactional
     public ResponseEntity<Product> updateProduct(
         @PathVariable String id,
         @Valid @RequestBody ProductUpdateRequest request,
@@ -150,15 +154,82 @@ public class ProductController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
+        AuthSession session = authService.findValidSession(authToken).orElse(null);
+        boolean mainAdmin = authService.isLegacyMainAdminKey(providedAdminKey) || (session != null && session.isMainAdmin());
+
         return productRepository.findById(id)
             .map(product -> {
-                product.update(request.cost().trim(), request.status().trim(), request.stockQuantity());
-                if (lowStockAlertService.notifyIfNeeded(product)) {
-                    product.markLowStockAlertSent();
+                if (!mainAdmin) {
+                    String requestedByEmail = session == null ? "admin@antrocare.local" : session.getEmail();
+                    String requestedByName = session == null ? "Admin" : session.getDisplayName();
+                    productChangeRequestRepository.save(new ProductChangeRequest(product, request, requestedByEmail, requestedByName));
+                    return ResponseEntity.status(HttpStatus.ACCEPTED).body(product);
                 }
+
+                applyProductUpdate(product, request);
                 return ResponseEntity.ok(productRepository.save(product));
             })
             .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/product-change-requests")
+    public ResponseEntity<List<ProductChangeRequest>> productChangeRequests(
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        if (!authService.isMainAdmin(authToken)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        return ResponseEntity.ok(productChangeRequestRepository.findByStatusOrderByCreatedAtDesc("PENDING"));
+    }
+
+    @PostMapping("/product-change-requests/{id}/approve")
+    @Transactional
+    public ResponseEntity<ProductChangeRequest> approveProductChange(
+        @PathVariable Long id,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        AuthSession session = authService.findValidSession(authToken).filter(AuthSession::isMainAdmin).orElse(null);
+        if (session == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        return productChangeRequestRepository.findById(id)
+            .filter(change -> "PENDING".equals(change.getStatus()))
+            .flatMap(change -> productRepository.findById(change.getProductId()).map(product -> {
+                applyProductUpdate(product, new ProductUpdateRequest(change.getRequestedCost(), change.getRequestedStatus(), change.getRequestedStockQuantity()));
+                productRepository.save(product);
+                change.approve(session.getEmail());
+                return ResponseEntity.ok(productChangeRequestRepository.save(change));
+            }))
+            .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/product-change-requests/{id}/reject")
+    @Transactional
+    public ResponseEntity<ProductChangeRequest> rejectProductChange(
+        @PathVariable Long id,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        AuthSession session = authService.findValidSession(authToken).filter(AuthSession::isMainAdmin).orElse(null);
+        if (session == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        return productChangeRequestRepository.findById(id)
+            .filter(change -> "PENDING".equals(change.getStatus()))
+            .map(change -> {
+                change.reject(session.getEmail());
+                return ResponseEntity.ok(productChangeRequestRepository.save(change));
+            })
+            .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    private void applyProductUpdate(Product product, ProductUpdateRequest request) {
+        product.update(request.cost().trim(), request.status().trim(), request.stockQuantity());
+        if (lowStockAlertService.notifyIfNeeded(product)) {
+            product.markLowStockAlertSent();
+        }
     }
 
     private boolean isAdmin(String providedAdminKey, String authToken) {
