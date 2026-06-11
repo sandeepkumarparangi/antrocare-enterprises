@@ -12,6 +12,8 @@ public record ProductPurchaseRequest(
     @NotBlank String buyerPhone,
     @Email String buyerEmail,
     @Min(1) @Max(99) int quantity,
-    @Size(max = 500) String notes
+    @Size(max = 500) String notes,
+    @Size(max = 255) String prescriptionFileName,
+    @Size(max = 500) String prescriptionUrl
 ) {
 }

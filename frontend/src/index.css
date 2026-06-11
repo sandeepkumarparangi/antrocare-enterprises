@@ -171,6 +171,22 @@
     @apply bg-white/20 text-white;
   }
 
+  .filter-chip {
+    @apply inline-flex min-h-9 shrink-0 items-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black uppercase text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:text-clinical hover:shadow-md;
+  }
+
+  .filter-chip-active {
+    @apply border-ocean bg-sky-50 text-ocean shadow-md hover:text-ocean;
+  }
+
+  .finder-tile {
+    @apply min-h-12 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:text-clinical hover:shadow-md;
+  }
+
+  .finder-tile-active {
+    @apply border-clinical bg-emerald-50 text-clinical shadow-md;
+  }
+
   .empty-panel {
     @apply grid min-h-64 place-items-center rounded-lg border border-dashed border-emerald-200 bg-white/85 p-8 text-center text-lg font-black text-slate-500;
   }
@@ -251,6 +267,113 @@
   .mobile-install-banner {
     @apply fixed left-3 right-3 z-40 flex items-center gap-3 rounded-lg border border-white/80 bg-white/95 p-3 shadow-soft backdrop-blur-xl md:hidden;
     bottom: calc(5.9rem + env(safe-area-inset-bottom));
+  }
+}
+
+.settings-font-compact {
+  font-size: 15px;
+}
+
+.settings-font-comfortable {
+  font-size: 16px;
+}
+
+.settings-font-large {
+  font-size: 18px;
+}
+
+.settings-theme-ocean .btn-primary {
+  background: linear-gradient(90deg, #236a9f, #0f8a78, #142033);
+}
+
+.settings-theme-coral .btn-primary {
+  background: linear-gradient(90deg, #e06f52, #c99b38, #142033);
+}
+
+.settings-theme-neutral .btn-primary {
+  background: linear-gradient(90deg, #334155, #64748b, #142033);
+}
+
+.settings-theme-ocean .eyebrow,
+.settings-theme-ocean .text-clinical {
+  color: #236a9f;
+}
+
+.settings-theme-coral .eyebrow,
+.settings-theme-coral .text-clinical {
+  color: #e06f52;
+}
+
+.settings-theme-neutral .eyebrow,
+.settings-theme-neutral .text-clinical {
+  color: #334155;
+}
+
+.settings-mode-dark {
+  background:
+    linear-gradient(135deg, rgba(15, 138, 120, 0.18) 0 18%, transparent 18% 100%),
+    linear-gradient(180deg, #101827 0%, #142033 52%, #0f172a 100%);
+  color: #e5edf4;
+}
+
+.settings-mode-dark .app-header,
+.settings-mode-dark .surface-panel-padded,
+.settings-mode-dark .surface-panel,
+.settings-mode-dark .graph-card,
+.settings-mode-dark .product-card,
+.settings-mode-dark .hero-copy-panel,
+.settings-mode-dark .control-dock,
+.settings-mode-dark .admin-graph-shell,
+.settings-mode-dark .field,
+.settings-mode-dark .toast-panel,
+.settings-mode-dark .image-modal-panel,
+.settings-mode-dark .mobile-tabbar {
+  background-color: rgba(15, 23, 42, 0.94);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #e5edf4;
+}
+
+.settings-mode-dark .text-ink,
+.settings-mode-dark .font-black {
+  color: #f8fafc;
+}
+
+.settings-mode-dark .text-slate-500,
+.settings-mode-dark .text-slate-600 {
+  color: #cbd5e1;
+}
+
+.settings-mode-dark .bg-white,
+.settings-mode-dark .bg-slate-50,
+.settings-mode-dark .bg-slate-50\/70,
+.settings-mode-dark .bg-slate-50\/80 {
+  background-color: rgba(30, 41, 59, 0.92);
+}
+
+.settings-mode-dark .field {
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.settings-high-contrast .surface-panel-padded,
+.settings-high-contrast .product-card,
+.settings-high-contrast .field,
+.settings-high-contrast .btn-secondary,
+.settings-high-contrast .category-chip,
+.settings-high-contrast .filter-chip {
+  border-color: #142033;
+  box-shadow: 0 0 0 2px rgba(20, 32, 51, 0.18);
+}
+
+.settings-high-contrast .btn-primary {
+  box-shadow: 0 0 0 3px rgba(20, 32, 51, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-mode-system {
+    background:
+      linear-gradient(135deg, rgba(15, 138, 120, 0.18) 0 18%, transparent 18% 100%),
+      linear-gradient(180deg, #101827 0%, #142033 52%, #0f172a 100%);
+    color: #e5edf4;
   }
 }
 

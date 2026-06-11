@@ -31,6 +31,29 @@ async function request(path, options = {}) {
     return null;
   }
 
+  const data = await response.json();
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return { ...data, _responseStatus: response.status };
+  }
+  return data;
+}
+
+async function uploadRequest(path, file, authToken) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      ...(authToken ? { "X-Auth-Token": authToken } : {})
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error(`Upload failed with status ${response.status}`);
+  }
+
   return response.json();
 }
 
@@ -48,6 +71,10 @@ export function fetchSummary() {
 
 export function fetchPurchaseRequests(adminKey) {
   return request("/api/purchase-requests", { adminKey });
+}
+
+export function fetchMyPurchaseRequests(authToken) {
+  return request("/api/purchase-requests/me", { authToken });
 }
 
 export function fetchStockAlerts(adminKey) {
@@ -77,6 +104,18 @@ export function createPurchaseRequest(purchaseRequest, authToken) {
     method: "POST",
     authToken,
     body: purchaseRequest
+  });
+}
+
+export function uploadPrescription(file, authToken) {
+  return uploadRequest("/api/prescriptions", file, authToken);
+}
+
+export function updatePurchaseRequestStatus(requestId, status, adminKey) {
+  return request(`/api/purchase-requests/${requestId}/status`, {
+    method: "PATCH",
+    adminKey,
+    body: { status }
   });
 }
 
@@ -133,5 +172,13 @@ export function deleteAdminAccount(adminId, authToken) {
   return request(`/api/auth/admin/accounts/${adminId}`, {
     method: "DELETE",
     authToken
+  });
+}
+
+export function sendTestEmail(authToken, email = "sandeepkumar.parangi@gmail.com") {
+  return request("/api/notifications/test-email", {
+    method: "POST",
+    authToken,
+    body: { email }
   });
 }

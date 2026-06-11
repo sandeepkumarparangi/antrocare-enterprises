@@ -65,27 +65,29 @@ admin123
 
 Users can browse active products after signing up or logging in. Buying a product requires a user session. Admins can update product costs, stock, visibility, and review saved buy requests. Products start at `₹50` with stock tracking enabled.
 
-Main admin controls approval. Product changes submitted by registered admins are saved as pending requests and do not update the live catalog until the main admin approves them. The main admin can approve or reject those requests from the admin dashboard.
+Main admin controls approval. Product changes submitted by registered admins are saved as pending requests and do not update the live catalog until the main admin approves them. The main admin can approve or reject those requests from the admin dashboard. If an admin submits values that match the current product values, no approval request is created.
 
 The main admin can sign in by leaving the admin email blank and entering the main passcode. Only the main admin can create more admins. New admins are created with name, email, phone number, and password, then they can sign in with their email and password.
 
 ## Local Email Alerts
 
-Low-stock alerts are sent when a product has less than 5 units available. The destination email defaults to:
+Low-stock alerts are sent when a product has less than 5 units available. Approval notifications are also sent to the registered admin who requested the change when the main admin approves or rejects it. The main notification email defaults to:
 
 ```text
-sandeepkumar.parangi0305@gmail.com
+sandeepkumar.parangi@gmail.com
 ```
 
-Copy `.env.local.example` into your shell environment values before starting Spring Boot. For Gmail, use a Gmail App Password, not your normal Gmail password.
+Email is disabled by default for local development. Enable either SMTP or AWS SES before testing real inbox delivery. For Gmail SMTP, use a Gmail App Password, not your normal Gmail password.
 
 ```bash
 export ANTROCARE_MAIL_ALERTS_ENABLED=true
-export ANTROCARE_ADMIN_EMAIL=sandeepkumar.parangi0305@gmail.com
-export SMTP_USERNAME=sandeepkumar.parangi0305@gmail.com
+export ANTROCARE_ADMIN_EMAIL=sandeepkumar.parangi@gmail.com
+export SMTP_USERNAME=your-gmail-address@gmail.com
 export SMTP_PASSWORD=your-gmail-app-password
 ./mvnw spring-boot:run
 ```
+
+After signing in as admin, use **Send test email** on the admin dashboard to send a test message to `sandeepkumar.parangi@gmail.com`.
 
 Do not commit real SMTP passwords. Put private local values in `.env.local` or your terminal environment only.
 

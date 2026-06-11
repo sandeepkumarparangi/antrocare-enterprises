@@ -1,12 +1,24 @@
 package com.antrocare.catalog.product;
 
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.transaction.Transactional;
 
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.antrocare.catalog.auth.AuthSession;
 import com.antrocare.catalog.auth.AuthService;
@@ -27,10 +40,14 @@ import com.antrocare.catalog.auth.AuthService;
 @CrossOrigin
 public class ProductController {
 
+    private static final Path PRESCRIPTION_UPLOAD_DIR = Path.of("uploads", "prescriptions");
+    private static final Set<String> PURCHASE_REQUEST_STATUSES = Set.of("New", "Reviewed", "Contacted", "Completed");
+
     private final ProductRepository productRepository;
     private final PurchaseRequestRepository purchaseRequestRepository;
     private final ProductChangeRequestRepository productChangeRequestRepository;
     private final LowStockAlertService lowStockAlertService;
+    private final AdminApprovalNotificationService adminApprovalNotificationService;
     private final AuthService authService;
 
     public ProductController(
@@ -38,12 +55,14 @@ public class ProductController {
         PurchaseRequestRepository purchaseRequestRepository,
         ProductChangeRequestRepository productChangeRequestRepository,
         LowStockAlertService lowStockAlertService,
+        AdminApprovalNotificationService adminApprovalNotificationService,
         AuthService authService
     ) {
         this.productRepository = productRepository;
         this.purchaseRequestRepository = purchaseRequestRepository;
         this.productChangeRequestRepository = productChangeRequestRepository;
         this.lowStockAlertService = lowStockAlertService;
+        this.adminApprovalNotificationService = adminApprovalNotificationService;
         this.authService = authService;
     }
 
@@ -101,6 +120,21 @@ public class ProductController {
         return ResponseEntity.ok(productRepository.findByStockQuantityGreaterThanAndStockQuantityLessThanOrderByStockQuantityAscNameAsc(0, lowStockAlertService.threshold()));
     }
 
+    @PostMapping("/notifications/test-email")
+    public ResponseEntity<Void> sendTestEmail(
+        @RequestBody(required = false) Map<String, String> request,
+        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        if (!isAdmin(providedAdminKey, authToken)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        String recipientEmail = request == null ? null : request.get("email");
+        boolean sent = adminApprovalNotificationService.sendTestEmail(recipientEmail);
+        return sent ? ResponseEntity.noContent().build() : ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+    }
+
     @PostMapping("/purchase-requests")
     @Transactional
     public ResponseEntity<PurchaseRequest> createPurchaseRequest(
@@ -130,6 +164,60 @@ public class ProductController {
             .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @PostMapping(value = "/prescriptions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, String>> uploadPrescription(
+        @RequestParam("file") MultipartFile file,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        AuthSession session = authService.findValidSession(authToken).orElse(null);
+        if (session == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        String originalName = file.getOriginalFilename() == null ? "prescription" : Path.of(file.getOriginalFilename()).getFileName().toString();
+        String safeName = originalName.replaceAll("[^A-Za-z0-9._-]", "_");
+        String storedName = UUID.randomUUID() + "-" + safeName;
+
+        try {
+            Files.createDirectories(PRESCRIPTION_UPLOAD_DIR);
+            file.transferTo(PRESCRIPTION_UPLOAD_DIR.resolve(storedName));
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "fileName", originalName,
+                "url", "/api/prescriptions/" + storedName
+            ));
+        } catch (IOException error) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/prescriptions/{fileName}")
+    public ResponseEntity<Resource> prescription(
+        @PathVariable String fileName,
+        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        if (!isAdmin(providedAdminKey, authToken) && authService.findValidSession(authToken).isEmpty()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        try {
+            Path file = PRESCRIPTION_UPLOAD_DIR.resolve(Path.of(fileName).getFileName()).normalize();
+            if (!file.startsWith(PRESCRIPTION_UPLOAD_DIR) || !Files.exists(file)) {
+                return ResponseEntity.notFound().build();
+            }
+            Resource resource = new UrlResource(file.toUri());
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.getFileName() + "\"")
+                .body(resource);
+        } catch (MalformedURLException error) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     @GetMapping("/purchase-requests")
     public ResponseEntity<List<PurchaseRequest>> purchaseRequests(
         @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey,
@@ -140,6 +228,43 @@ public class ProductController {
         }
 
         return ResponseEntity.ok(purchaseRequestRepository.findAllByOrderByCreatedAtDesc());
+    }
+
+    @GetMapping("/purchase-requests/me")
+    public ResponseEntity<List<PurchaseRequest>> myPurchaseRequests(
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        AuthSession session = authService.findValidSession(authToken).orElse(null);
+        if (session == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        return ResponseEntity.ok(purchaseRequestRepository.findByBuyerEmailIgnoreCaseOrderByCreatedAtDesc(session.getEmail()));
+    }
+
+    @PatchMapping("/purchase-requests/{id}/status")
+    @Transactional
+    public ResponseEntity<PurchaseRequest> updatePurchaseRequestStatus(
+        @PathVariable Long id,
+        @RequestBody Map<String, String> request,
+        @RequestHeader(value = "X-Admin-Key", required = false) String providedAdminKey,
+        @RequestHeader(value = "X-Auth-Token", required = false) String authToken
+    ) {
+        if (!isAdmin(providedAdminKey, authToken)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        String status = request == null ? "" : request.getOrDefault("status", "").trim();
+        if (!PURCHASE_REQUEST_STATUSES.contains(status)) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        return purchaseRequestRepository.findById(id)
+            .map(purchaseRequest -> {
+                purchaseRequest.updateStatus(status);
+                return ResponseEntity.ok(purchaseRequestRepository.save(purchaseRequest));
+            })
+            .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PatchMapping("/products/{id}")
@@ -159,6 +284,10 @@ public class ProductController {
 
         return productRepository.findById(id)
             .map(product -> {
+                if (!hasProductChanges(product, request)) {
+                    return ResponseEntity.ok(product);
+                }
+
                 if (!mainAdmin) {
                     String requestedByEmail = session == null ? "admin@antrocare.local" : session.getEmail();
                     String requestedByName = session == null ? "Admin" : session.getDisplayName();
@@ -200,7 +329,9 @@ public class ProductController {
                 applyProductUpdate(product, new ProductUpdateRequest(change.getRequestedCost(), change.getRequestedStatus(), change.getRequestedStockQuantity()));
                 productRepository.save(product);
                 change.approve(session.getEmail());
-                return ResponseEntity.ok(productChangeRequestRepository.save(change));
+                ProductChangeRequest savedChange = productChangeRequestRepository.save(change);
+                adminApprovalNotificationService.notifyApproved(savedChange);
+                return ResponseEntity.ok(savedChange);
             }))
             .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -220,7 +351,9 @@ public class ProductController {
             .filter(change -> "PENDING".equals(change.getStatus()))
             .map(change -> {
                 change.reject(session.getEmail());
-                return ResponseEntity.ok(productChangeRequestRepository.save(change));
+                ProductChangeRequest savedChange = productChangeRequestRepository.save(change);
+                adminApprovalNotificationService.notifyRejected(savedChange);
+                return ResponseEntity.ok(savedChange);
             })
             .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -230,6 +363,12 @@ public class ProductController {
         if (lowStockAlertService.notifyIfNeeded(product)) {
             product.markLowStockAlertSent();
         }
+    }
+
+    private boolean hasProductChanges(Product product, ProductUpdateRequest request) {
+        return !product.getCost().equals(request.cost().trim())
+            || !product.getStatus().equals(request.status().trim())
+            || product.getStockQuantity() != request.stockQuantity();
     }
 
     private boolean isAdmin(String providedAdminKey, String authToken) {

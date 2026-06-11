@@ -6,17 +6,21 @@ import {
   Boxes,
   CheckCircle2,
   ClipboardList,
+  Clock3,
+  Filter,
+  KeyRound,
   LockKeyhole,
   LogOut,
   Mail,
   MapPin,
   Maximize2,
+  MessageCircle,
   PackageCheck,
   Phone,
   Search,
   Send,
+  Settings,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
   Stethoscope,
   Store,
@@ -27,10 +31,94 @@ import {
   UserPlus,
   X
 } from "lucide-react";
-import { approveProductChange, createPurchaseRequest, deleteAdminAccount, fetchAdminAccounts, fetchCategories, fetchCurrentSession, fetchProductChangeRequests, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, registerAdmin, rejectProductChange, signupUser, updateProduct } from "./api";
+import { approveProductChange, createPurchaseRequest, deleteAdminAccount, fetchAdminAccounts, fetchCategories, fetchCurrentSession, fetchMyPurchaseRequests, fetchProductChangeRequests, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, registerAdmin, rejectProductChange, sendTestEmail, signupUser, updateProduct, updatePurchaseRequestStatus, uploadPrescription } from "./api";
 
 const AUTH_SESSION_KEY = "antrocare-auth-session";
+const APP_SETTINGS_KEY = "antrocare-app-settings";
 const DEFAULT_COST = "₹50";
+const WHATSAPP_URL = "https://wa.me/919444065691";
+const BODY_AREAS = [
+  { id: "all", label: "All areas", keywords: [] },
+  { id: "neck", label: "Neck", keywords: ["cervical", "neck", "collar"] },
+  { id: "shoulder", label: "Shoulder", keywords: ["shoulder", "arm sling", "clavicle", "humeral"] },
+  { id: "wrist", label: "Elbow / Wrist", keywords: ["elbow", "wrist", "thumb", "hand", "carpal"] },
+  { id: "back", label: "Back / Spine", keywords: ["spine", "thoracic", "lumbar", "back", "sacro", "coccyx"] },
+  { id: "hip", label: "Hip", keywords: ["hip", "femur"] },
+  { id: "knee", label: "Knee", keywords: ["knee", "kafo", "acl", "pcl"] },
+  { id: "ankle", label: "Ankle / Foot", keywords: ["ankle", "foot", "toe", "heel", "insole"] },
+  { id: "rehab", label: "Rehab", keywords: ["walker", "walking", "crutch", "stick", "exercise", "thera", "weight"] },
+  { id: "pediatric", label: "Pediatric", keywords: ["child", "pediatric", "torticollis"] }
+];
+const NEED_TYPES = [
+  { id: "all", label: "Any need", keywords: [] },
+  { id: "pain", label: "Pain relief", keywords: ["pain", "comfort", "support", "cushion", "pillow", "belt", "sleeve"] },
+  { id: "injury", label: "Injury recovery", keywords: ["fracture", "immobilizer", "immobiliser", "splint", "brace", "support"] },
+  { id: "posture", label: "Posture support", keywords: ["posture", "spinal", "lumbar", "cervical", "back"] },
+  { id: "walking", label: "Walking support", keywords: ["walker", "walking", "crutch", "stick", "ankle", "foot"] },
+  { id: "therapy", label: "Exercise therapy", keywords: ["exercise", "thera", "weight", "rom", "dynamic"] }
+];
+const PRODUCT_BUNDLES = [
+  { name: "Neck pain kit", keywords: ["cervical", "neck", "pillow", "collar"], note: "Daily neck support and sleep comfort." },
+  { name: "Knee recovery kit", keywords: ["knee", "immobiliser", "brace", "cap"], note: "Support for knee strain, recovery, and controlled movement." },
+  { name: "Back support kit", keywords: ["lumbar", "spine", "back", "sacro"], note: "Posture and lower-back support for daily use." },
+  { name: "Walking support kit", keywords: ["walker", "crutch", "walking", "stick"], note: "Mobility support after injury or weakness." }
+];
+const SEARCH_SYNONYMS = {
+  "neck pain": "cervical collar pillow traction neck",
+  "back pain": "lumbar spine back sacro belt posture",
+  "knee pain": "knee brace cap immobiliser acl pcl",
+  "ankle pain": "ankle foot splint walker stabilizer",
+  "wrist pain": "wrist cock up splint carpal thumb",
+  "shoulder pain": "shoulder arm sling clavicle immobilizer",
+  "walking support": "walker crutch walking stick rehabilitation",
+  "child support": "pediatric child torticollis head holder"
+};
+const CARE_GUIDE = {
+  "Cervical Orthosis": ["Wear only as advised by a clinician.", "Keep foam and skin contact areas dry.", "Check for pressure marks every few hours."],
+  "Knee Supports": ["Fasten evenly around the knee.", "Avoid over-tightening around swelling.", "Air dry after gentle cleaning."],
+  "Ankle Orthosis": ["Wear with comfortable socks when suitable.", "Check heel and toe comfort before walking.", "Keep straps clean and dry."],
+  "Spine Supports": ["Position the belt around the painful support area.", "Tighten gradually while standing upright.", "Remove during sleep unless advised."],
+  default: ["Use under professional guidance when injured.", "Keep the product clean and dry.", "Stop use if discomfort or numbness increases."]
+};
+const SIZE_GUIDE = {
+  "Cervical Orthosis": "Measure neck circumference and neck height before selecting collar size.",
+  "Knee Supports": "Measure around the knee center and compare with product sizing.",
+  "Ankle Orthosis": "Measure ankle circumference and usual footwear size.",
+  "Spine Supports": "Measure waist or abdominal circumference over light clothing.",
+  "Waist / Abdominal Supports": "Measure around the abdomen where the belt will sit.",
+  default: "Measure the supported body area snugly, without compressing skin."
+};
+const DEFAULT_APP_SETTINGS = {
+  profileName: "",
+  profileEmail: "",
+  profilePicture: "",
+  defaultStockFilter: "all",
+  compactCards: false,
+  showSupportPrompts: true,
+  emailNotifications: true,
+  pushNotifications: false,
+  smsNotifications: false,
+  orderUpdates: true,
+  lowStockAlerts: true,
+  promotionalMessages: false,
+  dataSharing: false,
+  publicProfile: true,
+  analyticsSharing: false,
+  appearanceMode: "light",
+  themeColor: "clinical",
+  fontSize: "comfortable",
+  highContrast: false,
+  screenReaderHints: true,
+  language: "en",
+  timezone: "America/Chicago",
+  dateFormat: "medium",
+  twoFactorEnabled: false,
+  loginAlerts: true,
+  rememberDevice: true,
+  linkedGoogle: false,
+  linkedWhatsApp: true,
+  linkedEmail: true
+};
 
 function readStoredSession() {
   try {
@@ -40,14 +128,65 @@ function readStoredSession() {
   }
 }
 
+function readStoredSettings() {
+  try {
+    return { ...DEFAULT_APP_SETTINGS, ...JSON.parse(localStorage.getItem(APP_SETTINGS_KEY) || "{}") };
+  } catch {
+    return DEFAULT_APP_SETTINGS;
+  }
+}
+
 function createEmptyPurchaseDraft(session = null) {
   return {
     buyerName: session?.displayName && session.displayName !== session.email ? session.displayName : "",
     buyerPhone: "",
     buyerEmail: session?.email || "",
     quantity: 1,
+    prescriptionName: "",
+    prescriptionUrl: "",
     notes: ""
   };
+}
+
+function expandSearchQuery(query) {
+  if (!query) return "";
+  const additions = Object.entries(SEARCH_SYNONYMS)
+    .filter(([phrase]) => query.includes(phrase))
+    .map(([, terms]) => terms)
+    .join(" ");
+  return `${query} ${additions}`.trim();
+}
+
+function productGuideFor(product) {
+  return {
+    care: CARE_GUIDE[product.category] || CARE_GUIDE.default,
+    size: SIZE_GUIDE[product.category] || SIZE_GUIDE.default
+  };
+}
+
+function recommendProducts(products, prompt, limit = 4) {
+  const terms = expandSearchQuery(String(prompt || "").toLowerCase()).split(/\s+/).filter(Boolean);
+  if (!terms.length) return [];
+
+  return products
+    .map((product) => {
+      const searchableText = `${product.name} ${product.category} ${product.useDescription || ""}`.toLowerCase();
+      const score = terms.reduce((sum, term) => sum + (searchableText.includes(term) ? 1 : 0), 0);
+      return { product, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score || left.product.name.localeCompare(right.product.name))
+    .slice(0, limit)
+    .map((item) => item.product);
+}
+
+function bundleProducts(products, bundle) {
+  return products
+    .filter((product) => {
+      const searchableText = `${product.name} ${product.category} ${product.useDescription || ""}`.toLowerCase();
+      return bundle.keywords.some((keyword) => searchableText.includes(keyword));
+    })
+    .slice(0, 3);
 }
 
 function App() {
@@ -55,10 +194,16 @@ function App() {
   const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState({ totalProducts: 0, activeProducts: 0, pricedProducts: 0, categories: 0, purchaseRequests: 0, totalUnitsSold: 0, lowStockProducts: 0 });
   const [purchaseRequests, setPurchaseRequests] = useState([]);
+  const [myPurchaseRequests, setMyPurchaseRequests] = useState([]);
   const [stockAlerts, setStockAlerts] = useState([]);
   const [productChangeRequests, setProductChangeRequests] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedBodyArea, setSelectedBodyArea] = useState("all");
+  const [selectedNeedType, setSelectedNeedType] = useState("all");
+  const [compareIds, setCompareIds] = useState([]);
+  const [appSettings, setAppSettings] = useState(readStoredSettings);
+  const [stockFilter, setStockFilter] = useState(appSettings.defaultStockFilter);
   const [view, setView] = useState("catalog");
   const [authSession, setAuthSession] = useState(readStoredSession);
   const [adminLoginDraft, setAdminLoginDraft] = useState({ email: "", password: "" });
@@ -81,6 +226,17 @@ function App() {
   const isMainAdmin = Boolean(authSession?.mainAdmin);
   const isUser = authSession?.role === "USER";
   const adminKey = isAdmin ? authSession.token : "";
+  const appShellClasses = [
+    "app-shell min-h-screen text-ink",
+    `settings-mode-${appSettings.appearanceMode}`,
+    `settings-theme-${appSettings.themeColor}`,
+    `settings-font-${appSettings.fontSize}`,
+    appSettings.highContrast ? "settings-high-contrast" : ""
+  ].filter(Boolean).join(" ");
+
+  useEffect(() => {
+    localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(appSettings));
+  }, [appSettings]);
 
   useEffect(() => {
     loadCatalog(adminKey);
@@ -90,6 +246,10 @@ function App() {
     refreshAdminAccounts();
     refreshProductChangeRequests();
   }, [adminKey, isMainAdmin]);
+
+  useEffect(() => {
+    refreshMyPurchaseRequests();
+  }, [authSession?.token, isUser]);
 
   useEffect(() => {
     if (!authSession?.token) return undefined;
@@ -166,13 +326,31 @@ function App() {
 
   const visibleProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    const expandedQuery = expandSearchQuery(normalizedQuery);
+    const bodyArea = BODY_AREAS.find((area) => area.id === selectedBodyArea) || BODY_AREAS[0];
+    const needType = NEED_TYPES.find((need) => need.id === selectedNeedType) || NEED_TYPES[0];
+
     return products.filter((product) => {
+      const searchableText = `${product.name} ${product.category} ${product.useDescription || ""}`.toLowerCase();
       const categoryMatch = selectedCategory === "All" || product.category === selectedCategory;
-      const textMatch = !normalizedQuery || `${product.name} ${product.category} ${product.useDescription || ""}`.toLowerCase().includes(normalizedQuery);
+      const textMatch = !expandedQuery || expandedQuery.split(/\s+/).some((term) => term && searchableText.includes(term));
+      const bodyMatch = !bodyArea.keywords.length || bodyArea.keywords.some((keyword) => searchableText.includes(keyword));
+      const needMatch = !needType.keywords.length || needType.keywords.some((keyword) => searchableText.includes(keyword));
       const statusMatch = isAdmin || product.status === "Active";
-      return categoryMatch && textMatch && statusMatch;
+      const stock = Number(product.stockQuantity) || 0;
+      const stockMatch = stockFilter === "all"
+        || (stockFilter === "available" && stock > 0)
+        || (stockFilter === "low" && stock > 0 && stock < 5)
+        || (stockFilter === "unavailable" && stock === 0);
+      return categoryMatch && textMatch && bodyMatch && needMatch && statusMatch && stockMatch;
     });
-  }, [products, query, selectedCategory, isAdmin]);
+  }, [products, query, selectedCategory, selectedBodyArea, selectedNeedType, stockFilter, isAdmin]);
+
+  const compareProducts = useMemo(() => {
+    return compareIds
+      .map((id) => products.find((product) => product.id === id))
+      .filter(Boolean);
+  }, [compareIds, products]);
 
   const categoryCounts = useMemo(() => {
     return products.reduce((acc, product) => {
@@ -256,12 +434,28 @@ function App() {
     setAdminAccounts([]);
     setProductChangeRequests([]);
     setPurchaseRequests([]);
+    setMyPurchaseRequests([]);
     setStockAlerts([]);
     setView("catalog");
   }
 
   function updateLocalProduct(id, field, value) {
     setProducts((current) => current.map((product) => (product.id === id ? { ...product, [field]: value } : product)));
+  }
+
+  function toggleCompare(product) {
+    setCompareIds((current) => {
+      if (current.includes(product.id)) {
+        return current.filter((id) => id !== product.id);
+      }
+
+      if (current.length >= 3) {
+        setStatusMessage("You can compare up to 3 products at a time.");
+        return current;
+      }
+
+      return [...current, product.id];
+    });
   }
 
   async function saveProduct(product) {
@@ -272,8 +466,10 @@ function App() {
       setStockAlerts(await fetchStockAlerts(adminKey));
       if (isMainAdmin) {
         setStatusMessage(`${updated.name} updated.`);
-      } else {
+      } else if (updated._responseStatus === 202) {
         setStatusMessage(`${updated.name} was sent to the main admin for approval.`);
+      } else {
+        setStatusMessage(`No changes were found for ${updated.name}.`);
       }
     } catch (error) {
       setStatusMessage("Admin update failed. Check the passcode and backend server.");
@@ -303,6 +499,19 @@ function App() {
       setProductChangeRequests(await fetchProductChangeRequests(token));
     } catch {
       setProductChangeRequests([]);
+    }
+  }
+
+  async function refreshMyPurchaseRequests(token = authSession?.token) {
+    if (!isUser || !token) {
+      setMyPurchaseRequests([]);
+      return;
+    }
+
+    try {
+      setMyPurchaseRequests(await fetchMyPurchaseRequests(token));
+    } catch {
+      setMyPurchaseRequests([]);
     }
   }
 
@@ -366,6 +575,29 @@ function App() {
     }
   }
 
+  async function handlePurchaseStatusChange(request, status) {
+    if (!isAdmin || !adminKey) return;
+
+    try {
+      const updated = await updatePurchaseRequestStatus(request.id, status, adminKey);
+      setPurchaseRequests((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setStatusMessage(`${request.productName} request moved to ${status}.`);
+    } catch {
+      setStatusMessage("Could not update request status.");
+    }
+  }
+
+  async function handleSendTestEmail() {
+    if (!isAdmin || !adminKey) return;
+
+    try {
+      await sendTestEmail(adminKey);
+      setStatusMessage("Test email sent to sandeepkumar.parangi@gmail.com.");
+    } catch {
+      setStatusMessage("Test email was not sent. Enable SMTP or SES email settings first.");
+    }
+  }
+
   function openPurchaseModal(product) {
     if (!authSession?.token) {
       setPendingPurchaseProduct(product);
@@ -383,6 +615,51 @@ function App() {
 
   function updatePurchaseDraft(field, value) {
     setPurchaseDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handlePrescriptionFile(file) {
+    if (!file || !authSession?.token) return;
+
+    try {
+      const uploaded = await uploadPrescription(file, authSession.token);
+      setPurchaseDraft((current) => ({
+        ...current,
+        prescriptionName: uploaded.fileName,
+        prescriptionUrl: uploaded.url
+      }));
+      setStatusMessage("Prescription uploaded.");
+    } catch {
+      setPurchaseDraft((current) => ({
+        ...current,
+        prescriptionName: file.name,
+        prescriptionUrl: ""
+      }));
+      setStatusMessage("Prescription upload failed. The file name was saved for follow-up.");
+    }
+  }
+
+  function updateAppSetting(field, value) {
+    setAppSettings((current) => ({ ...current, [field]: value }));
+    if (field === "defaultStockFilter") {
+      setStockFilter(value);
+    }
+  }
+
+  function updateProfilePicture(file) {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateAppSetting("profilePicture", reader.result);
+      setStatusMessage("Profile picture saved locally.");
+    };
+    reader.onerror = () => setStatusMessage("Could not load that profile picture.");
+    reader.readAsDataURL(file);
+  }
+
+  function removeProfilePicture() {
+    updateAppSetting("profilePicture", "");
+    setStatusMessage("Profile picture removed.");
   }
 
   async function installMobileApp() {
@@ -414,7 +691,12 @@ function App() {
       buyerPhone: purchaseDraft.buyerPhone.trim(),
       buyerEmail: purchaseDraft.buyerEmail.trim(),
       quantity,
-      notes: purchaseDraft.notes.trim()
+      notes: [
+        purchaseDraft.notes.trim(),
+        purchaseDraft.prescriptionName ? `Doctor note/prescription: ${purchaseDraft.prescriptionName}` : ""
+      ].filter(Boolean).join("\n"),
+      prescriptionFileName: purchaseDraft.prescriptionName,
+      prescriptionUrl: purchaseDraft.prescriptionUrl
     };
 
     if (!request.buyerName || !request.buyerPhone) {
@@ -432,7 +714,12 @@ function App() {
       const saved = await createPurchaseRequest(request, authSession.token);
       setBuyingProduct(null);
       setPurchaseDraft(createEmptyPurchaseDraft());
-      setSummary(await fetchSummary());
+      const [summaryData, myRequestData] = await Promise.all([
+        fetchSummary(),
+        fetchMyPurchaseRequests(authSession.token).catch(() => [])
+      ]);
+      setSummary(summaryData);
+      setMyPurchaseRequests(myRequestData);
       if (adminKey) {
         const [purchaseRequestData, stockAlertData, productData] = await Promise.all([
           fetchPurchaseRequests(adminKey),
@@ -443,7 +730,7 @@ function App() {
         setStockAlerts(stockAlertData);
         setProducts(productData);
       }
-      setStatusMessage(`Successfully placed an item: ${saved.productName}.`);
+      setStatusMessage(`Request placed for ${saved.productName}. Our team will contact you shortly.`);
     } catch (error) {
       setStatusMessage("Buy request failed. Please login again or check available stock.");
     } finally {
@@ -452,7 +739,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell min-h-screen text-ink">
+    <div className={appShellClasses}>
       <Header view={view} setView={setView} authSession={authSession} isAdmin={isAdmin} isUser={isUser} onHeightChange={setHeaderHeight} onSignOut={signOut} />
 
       {view === "catalog" ? (
@@ -462,12 +749,24 @@ function App() {
           categoryCounts={categoryCounts}
           selectedCategory={selectedCategory}
           setSelectedCategory={setSelectedCategory}
+          selectedBodyArea={selectedBodyArea}
+          setSelectedBodyArea={setSelectedBodyArea}
+          selectedNeedType={selectedNeedType}
+          setSelectedNeedType={setSelectedNeedType}
+          stockFilter={stockFilter}
+          setStockFilter={setStockFilter}
           query={query}
           setQuery={setQuery}
           summary={summary}
+          appSettings={appSettings}
+          compareProducts={compareProducts}
+          compareIds={compareIds}
           loading={loading}
           onPreview={setPreviewProduct}
           onBuy={openPurchaseModal}
+          onCompare={toggleCompare}
+          onClearCompare={() => setCompareIds([])}
+          onShowRequests={() => setView("account")}
           headerHeight={headerHeight}
         />
       ) : view === "account" ? (
@@ -478,7 +777,23 @@ function App() {
           updateUserDraft={updateUserDraft}
           onSubmit={handleUserAuth}
           authSession={authSession}
+          myPurchaseRequests={myPurchaseRequests}
+          onBrowse={() => setView("catalog")}
           onSignOut={signOut}
+        />
+      ) : view === "settings" ? (
+        <SettingsPage
+          authSession={authSession}
+          isAdmin={isAdmin}
+          summary={summary}
+          appSettings={appSettings}
+          updateAppSetting={updateAppSetting}
+          onProfilePictureChange={updateProfilePicture}
+          onRemoveProfilePicture={removeProfilePicture}
+          onSendTestEmail={handleSendTestEmail}
+          onSignOut={signOut}
+          onLogin={() => setView("account")}
+          onAdmin={() => setView("admin")}
         />
       ) : (
         <AdminPage
@@ -500,6 +815,8 @@ function App() {
           onRegisterAdmin={handleAdminRegister}
           onDeleteAdmin={handleDeleteAdmin}
           onReviewProductChange={handleReviewProductChange}
+          onPurchaseStatusChange={handlePurchaseStatusChange}
+          onSendTestEmail={handleSendTestEmail}
           onSignOut={signOut}
           onLocalChange={updateLocalProduct}
           onSave={saveProduct}
@@ -516,6 +833,7 @@ function App() {
           product={buyingProduct}
           draft={purchaseDraft}
           onChange={updatePurchaseDraft}
+          onPrescriptionFile={handlePrescriptionFile}
           onClose={() => setBuyingProduct(null)}
           onSubmit={submitPurchaseRequest}
           submitting={purchaseSubmitting}
@@ -571,6 +889,7 @@ function Header({ view, setView, authSession, isAdmin, isUser, onHeightChange, o
             <NavButton active={view === "admin"} onClick={() => setView("admin")} icon={ShieldCheck} label="Admin sign in" />
           ) : null}
           <NavButton active={view === "account"} onClick={() => setView("account")} icon={isUser ? UserCircle : UserPlus} label={authSession ? authSession.displayName : "User login"} />
+          <NavButton active={view === "settings"} onClick={() => setView("settings")} icon={Settings} label="Settings" />
           {authSession ? (
             <button className="nav-pill" onClick={onSignOut} type="button">
               <LogOut size={18} />
@@ -609,6 +928,7 @@ function MobileNav({ view, setView, authSession, isAdmin, isUser }) {
     <nav className="mobile-tabbar" aria-label="Mobile navigation">
       <MobileNavButton active={view === "catalog"} onClick={() => setView("catalog")} icon={Store} label="Catalog" />
       <MobileNavButton active={view === "account"} onClick={() => setView("account")} icon={isUser ? UserCircle : UserPlus} label={authSession ? "Account" : "Login"} />
+      <MobileNavButton active={view === "settings"} onClick={() => setView("settings")} icon={Settings} label="Settings" />
       {(isAdmin || !isUser) ? (
         <MobileNavButton active={view === "admin"} onClick={() => setView("admin")} icon={ShieldCheck} label="Admin" />
       ) : null}
@@ -655,9 +975,131 @@ function CatalogPage(props) {
   return (
     <main>
       <Hero summary={props.summary} />
+      <UniqueCareSuite products={props.products} onBuy={props.onBuy} onCompare={props.onCompare} />
       <CatalogControls {...props} />
-      <ProductGrid products={props.products} loading={props.loading} onPreview={props.onPreview} onBuy={props.onBuy} />
+      <CareFinder
+        selectedBodyArea={props.selectedBodyArea}
+        setSelectedBodyArea={props.setSelectedBodyArea}
+        selectedNeedType={props.selectedNeedType}
+        setSelectedNeedType={props.setSelectedNeedType}
+      />
+      <ComparisonPanel products={props.compareProducts} onBuy={props.onBuy} onClear={props.onClearCompare} />
+      <ProductGrid
+        products={props.products}
+        loading={props.loading}
+        appSettings={props.appSettings}
+        compareIds={props.compareIds}
+        onPreview={props.onPreview}
+        onBuy={props.onBuy}
+        onCompare={props.onCompare}
+        onShowRequests={props.onShowRequests}
+      />
     </main>
+  );
+}
+
+function CareFinder({ selectedBodyArea, setSelectedBodyArea, selectedNeedType, setSelectedNeedType }) {
+  return (
+    <section className="mx-auto max-w-7xl px-4 pt-8 lg:px-10">
+      <div className="surface-panel-padded">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="eyebrow">Find product by pain area</p>
+            <h2 className="mt-1 text-3xl font-black leading-tight">Choose the body area and support need.</h2>
+            <p className="mt-2 max-w-2xl font-semibold leading-7 text-slate-600">
+              This guided finder narrows the catalog like an orthopaedic care assistant.
+            </p>
+          </div>
+          <Stethoscope className="text-clinical" size={32} />
+        </div>
+
+        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
+          <div>
+            <p className="mb-3 text-xs font-black uppercase text-slate-500">Body area</p>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {BODY_AREAS.map((area) => (
+                <button
+                  className={`finder-tile ${selectedBodyArea === area.id ? "finder-tile-active" : ""}`}
+                  key={area.id}
+                  type="button"
+                  onClick={() => setSelectedBodyArea(area.id)}
+                >
+                  {area.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-3 text-xs font-black uppercase text-slate-500">Support need</p>
+            <div className="grid gap-2">
+              {NEED_TYPES.map((need) => (
+                <button
+                  className={`finder-tile text-left ${selectedNeedType === need.id ? "finder-tile-active" : ""}`}
+                  key={need.id}
+                  type="button"
+                  onClick={() => setSelectedNeedType(need.id)}
+                >
+                  {need.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ComparisonPanel({ products, onBuy, onClear }) {
+  if (!products.length) return null;
+
+  return (
+    <section className="mx-auto max-w-7xl px-4 pt-6 lg:px-10">
+      <div className="surface-panel-padded border-ocean/20 bg-sky-50/80">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="eyebrow text-ocean">Product comparison</p>
+            <h2 className="mt-1 text-2xl font-black">Compare selected products side by side.</h2>
+          </div>
+          <button className="btn-secondary" type="button" onClick={onClear}>
+            <X size={18} />
+            Clear
+          </button>
+        </div>
+
+        <div className="mt-5 overflow-auto">
+          <table className="w-full min-w-[760px] border-collapse rounded-lg bg-white">
+            <thead>
+              <tr className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                <th className="table-cell">Product</th>
+                <th className="table-cell">Category</th>
+                <th className="table-cell">Use</th>
+                <th className="table-cell">Cost</th>
+                <th className="table-cell">Stock</th>
+                <th className="table-cell">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((product) => (
+                <tr className="border-t border-slate-100" key={product.id}>
+                  <td className="table-cell font-black">{product.name}</td>
+                  <td className="table-cell">{product.category}</td>
+                  <td className="table-cell max-w-sm text-sm font-semibold text-slate-600">{product.useDescription}</td>
+                  <td className="table-cell font-black">{product.cost}</td>
+                  <td className="table-cell font-black">{product.stockQuantity}</td>
+                  <td className="table-cell">
+                    <button className="btn-primary min-h-10 px-3" type="button" onClick={() => onBuy(product)}>
+                      Buy
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -708,6 +1150,148 @@ function Hero({ summary }) {
   );
 }
 
+function UniqueCareSuite({ products, onBuy, onCompare }) {
+  return (
+    <section className="mx-auto grid max-w-7xl gap-5 px-4 pt-8 lg:grid-cols-[1.1fr_0.9fr] lg:px-10">
+      <CareAssistant products={products} onBuy={onBuy} />
+      <VisualBodyMap />
+      <DoctorMode products={products} onCompare={onCompare} />
+      <ProductBundles products={products} onBuy={onBuy} />
+      <EducationHub />
+    </section>
+  );
+}
+
+function CareAssistant({ products, onBuy }) {
+  const [prompt, setPrompt] = useState("knee pain while walking");
+  const suggestions = recommendProducts(products, prompt, 3);
+
+  return (
+    <article className="surface-panel-padded">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="eyebrow">AI product assistant</p>
+          <h2 className="mt-1 text-2xl font-black">Describe pain or activity.</h2>
+        </div>
+        <Sparkles className="text-clinical" size={26} />
+      </div>
+      <textarea className="field mt-4 min-h-24 py-3" value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+      <div className="mt-4 grid gap-3">
+        {suggestions.length ? suggestions.map((product) => (
+          <article className="rounded-lg border border-slate-100 bg-white p-4" key={product.id}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="font-black">{product.name}</h3>
+                <p className="mt-1 text-sm font-bold text-slate-500">{product.category}</p>
+              </div>
+              <button className="btn-primary min-h-10 px-3" type="button" onClick={() => onBuy(product)}>Buy</button>
+            </div>
+          </article>
+        )) : <div className="rounded-lg border border-dashed border-slate-200 p-4 font-bold text-slate-500">Type a symptom to see suggestions.</div>}
+      </div>
+    </article>
+  );
+}
+
+function VisualBodyMap() {
+  return (
+    <article className="surface-panel-padded">
+      <p className="eyebrow">Visual body map</p>
+      <h2 className="mt-1 text-2xl font-black">Tap a care zone in the finder below.</h2>
+      <div className="mt-5 grid grid-cols-3 gap-2">
+        {["Neck", "Shoulder", "Wrist", "Back", "Hip", "Knee", "Ankle", "Foot", "Rehab"].map((area) => (
+          <a className="finder-tile grid place-items-center text-center" href="#products" key={area}>
+            {area}
+          </a>
+        ))}
+      </div>
+      <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">Use this map as a quick body-area shortcut, then refine with the guided finder.</p>
+    </article>
+  );
+}
+
+function DoctorMode({ products, onCompare }) {
+  const [caseNote, setCaseNote] = useState("post surgery knee support");
+  const recommendations = recommendProducts(products, caseNote, 4);
+
+  return (
+    <article className="surface-panel-padded lg:col-span-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="eyebrow">Doctor / therapist mode</p>
+          <h2 className="mt-1 text-2xl font-black">Create a quick recommendation shortlist.</h2>
+        </div>
+        <ClipboardList className="text-ocean" size={26} />
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+        <textarea className="field min-h-32 py-3" value={caseNote} onChange={(event) => setCaseNote(event.target.value)} />
+        <div className="grid gap-3 md:grid-cols-2">
+          {recommendations.map((product) => (
+            <article className="rounded-lg border border-slate-100 bg-white p-4" key={product.id}>
+              <h3 className="font-black">{product.name}</h3>
+              <p className="mt-1 text-sm font-bold text-slate-500">{product.category}</p>
+              <button className="btn-secondary mt-3 min-h-10 w-full" type="button" onClick={() => onCompare(product)}>
+                Add to compare
+              </button>
+            </article>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ProductBundles({ products, onBuy }) {
+  return (
+    <article className="surface-panel-padded lg:col-span-2">
+      <p className="eyebrow">Product bundles</p>
+      <h2 className="mt-1 text-2xl font-black">Ready-made care kits.</h2>
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {PRODUCT_BUNDLES.map((bundle) => {
+          const items = bundleProducts(products, bundle);
+          return (
+            <div className="rounded-lg border border-slate-100 bg-white p-4" key={bundle.name}>
+              <h3 className="font-black">{bundle.name}</h3>
+              <p className="mt-2 min-h-12 text-sm font-semibold leading-6 text-slate-500">{bundle.note}</p>
+              <div className="mt-3 grid gap-2">
+                {items.map((product) => (
+                  <button className="text-left text-sm font-black text-ocean hover:text-clinical" key={product.id} type="button" onClick={() => onBuy(product)}>
+                    {product.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
+
+function EducationHub() {
+  const topics = [
+    ["When to use", "Use supports for recovery, posture assistance, mobility, or clinician-guided protection."],
+    ["How to measure", "Measure the supported body area snugly over light clothing without compressing skin."],
+    ["Safety warnings", "Stop use if numbness, swelling, skin marks, or pain increases."],
+    ["Cleaning tips", "Clean gently, avoid harsh heat, and dry fully before reuse."]
+  ];
+
+  return (
+    <article className="surface-panel-padded lg:col-span-2">
+      <p className="eyebrow">Product education</p>
+      <h2 className="mt-1 text-2xl font-black">Care guidance before users buy.</h2>
+      <div className="mt-5 grid gap-4 md:grid-cols-4">
+        {topics.map(([title, detail]) => (
+          <div className="rounded-lg border border-slate-100 bg-white p-4" key={title}>
+            <h3 className="font-black">{title}</h3>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{detail}</p>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 function Metric({ icon: Icon, label, value }) {
   return (
     <article className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 md:p-4">
@@ -718,7 +1302,14 @@ function Metric({ icon: Icon, label, value }) {
   );
 }
 
-function CatalogControls({ categories, categoryCounts, selectedCategory, setSelectedCategory, query, setQuery, products, headerHeight }) {
+function CatalogControls({ categories, categoryCounts, selectedCategory, setSelectedCategory, query, setQuery, stockFilter, setStockFilter, products, headerHeight }) {
+  const stockFilters = [
+    { id: "all", label: "All stock" },
+    { id: "available", label: "Available" },
+    { id: "low", label: "Low stock" },
+    { id: "unavailable", label: "Unavailable" }
+  ];
+
   return (
     <section
       id="products"
@@ -750,12 +1341,29 @@ function CatalogControls({ categories, categoryCounts, selectedCategory, setSele
             </button>
           ))}
         </div>
+
+        <div className="mt-3 flex items-center gap-3 overflow-x-auto pb-1">
+          <span className="inline-flex shrink-0 items-center gap-2 text-xs font-black uppercase text-slate-500">
+            <Filter size={16} />
+            Availability
+          </span>
+          {stockFilters.map((filter) => (
+            <button
+              className={`filter-chip ${stockFilter === filter.id ? "filter-chip-active" : ""}`}
+              key={filter.id}
+              onClick={() => setStockFilter(filter.id)}
+              type="button"
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );
 }
 
-function ProductGrid({ products, loading, onPreview, onBuy }) {
+function ProductGrid({ products, loading, appSettings, compareIds, onPreview, onBuy, onCompare, onShowRequests }) {
   if (loading) {
     return <div className="mx-auto max-w-7xl px-4 py-8 pb-16 lg:px-10"><div className="empty-panel">Loading catalog...</div></div>;
   }
@@ -764,11 +1372,25 @@ function ProductGrid({ products, loading, onPreview, onBuy }) {
     <section className="mx-auto max-w-7xl px-4 py-8 pb-16 lg:px-10">
       <div className="mb-5 flex items-center justify-between gap-4 text-sm font-black text-slate-500">
         <span>{products.length} products shown</span>
-        <span className="hidden items-center gap-2 md:flex"><SlidersHorizontal size={17} /> Sorted by category</span>
+        <button className="hidden items-center gap-2 rounded-md px-3 py-2 transition hover:bg-white hover:text-clinical md:flex" type="button" onClick={onShowRequests}>
+          <Clock3 size={17} />
+          My requests
+        </button>
       </div>
       {products.length ? (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {products.map((product) => <ProductCard key={product.id} product={product} onPreview={onPreview} onBuy={onBuy} />)}
+          {products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              compact={appSettings.compactCards}
+              showSupportPrompts={appSettings.showSupportPrompts}
+              selectedForCompare={compareIds.includes(product.id)}
+              onPreview={onPreview}
+              onBuy={onBuy}
+              onCompare={onCompare}
+            />
+          ))}
         </div>
       ) : (
         <div className="empty-panel">No products match the current filters.</div>
@@ -777,7 +1399,7 @@ function ProductGrid({ products, loading, onPreview, onBuy }) {
   );
 }
 
-function ProductCard({ product, onPreview, onBuy }) {
+function ProductCard({ product, compact, showSupportPrompts, selectedForCompare, onPreview, onBuy, onCompare }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
   const availableStock = Number(product.stockQuantity) || 0;
@@ -795,22 +1417,30 @@ function ProductCard({ product, onPreview, onBuy }) {
           <Maximize2 size={16} />
         </span>
       </button>
-      <div className="p-5">
+      <div className={compact ? "p-4" : "p-5"}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="status-chip bg-emerald-50 text-clinical">{product.category}</span>
           <span className={`stock-chip ${stockClass}`}>{availableStock} stock</span>
         </div>
-        <h3 className="mt-4 min-h-14 text-xl font-black leading-tight">{product.name}</h3>
-        {product.useDescription ? (
+        <h3 className={`${compact ? "mt-3 min-h-0 text-lg" : "mt-4 min-h-14 text-xl"} font-black leading-tight`}>{product.name}</h3>
+        {!compact && product.useDescription ? (
           <p className="mt-3 min-h-12 text-sm font-semibold leading-6 text-slate-600">{product.useDescription}</p>
         ) : null}
         <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
           <span className="text-xs font-black uppercase text-slate-500">Cost</span>
           <strong className={`rounded-md px-2.5 py-1 ${product.cost === DEFAULT_COST ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-ocean"}`}>{product.cost}</strong>
         </div>
-        <button className="btn-primary mt-4 w-full min-h-11" type="button" onClick={() => onBuy(product)} disabled={availableStock === 0}>
-          <ShoppingCart size={18} />
-          {availableStock === 0 ? "Unavailable" : "Buy"}
+        <div className={`mt-4 grid gap-2 ${showSupportPrompts ? "sm:grid-cols-[1fr_auto]" : ""}`}>
+          <button className="btn-primary min-h-11" type="button" onClick={() => onBuy(product)} disabled={availableStock === 0}>
+            <ShoppingCart size={18} />
+            {availableStock === 0 ? "Unavailable" : "Buy"}
+          </button>
+          {showSupportPrompts ? <a className="btn-secondary min-h-11 px-3" href={`${WHATSAPP_URL}?text=${encodeURIComponent(`I want to know more about ${product.name}`)}`} target="_blank" rel="noreferrer" aria-label={`Ask about ${product.name} on WhatsApp`}>
+            <MessageCircle size={18} />
+          </a> : null}
+        </div>
+        <button className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-600 transition hover:border-ocean hover:text-ocean" type="button" onClick={() => onCompare(product)}>
+          {selectedForCompare ? "Remove from comparison" : "Compare product"}
         </button>
       </div>
     </article>
@@ -859,26 +1489,301 @@ function formatRevenue(product) {
   return `₹${revenue.toLocaleString("en-IN")}`;
 }
 
-function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubmit, authSession, onSignOut }) {
+function SettingsPage({
+  authSession,
+  isAdmin,
+  summary,
+  appSettings,
+  updateAppSetting,
+  onProfilePictureChange,
+  onRemoveProfilePicture,
+  onSendTestEmail,
+  onSignOut,
+  onLogin,
+  onAdmin
+}) {
+  const emailEnabled = false;
+  const displayName = appSettings.profileName || authSession?.displayName || "Guest customer";
+  const displayEmail = appSettings.profileEmail || authSession?.email || "Not signed in";
+  const currentTimePreview = new Intl.DateTimeFormat(appSettings.language === "hi" ? "hi-IN" : "en-US", {
+    dateStyle: appSettings.dateFormat,
+    timeStyle: "short",
+    timeZone: appSettings.timezone
+  }).format(new Date());
+
+  return (
+    <main className="mx-auto max-w-7xl px-4 py-12 lg:px-10">
+      <section className="grid gap-6 rounded-lg bg-gradient-to-br from-ink via-ocean to-clinical p-6 text-white shadow-soft lg:grid-cols-[minmax(0,1fr)_360px] lg:p-8">
+        <div>
+          <p className="eyebrow text-emerald-200">Settings</p>
+          <h1 className="max-w-4xl text-4xl font-black leading-tight md:text-6xl">Control app services, preferences, and access.</h1>
+          <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-300">
+            Keep customer browsing simple, admin tools reachable, and operational services visible from one place.
+          </p>
+        </div>
+      </section>
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-2">
+        <SettingsSection icon={UserCircle} title="Profile" badge={authSession ? "Signed in" : "Local"}>
+          <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-100 bg-white p-4">
+            <span className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-emerald-50 text-clinical ring-1 ring-emerald-100">
+              {appSettings.profilePicture ? (
+                <img className="h-full w-full object-cover" src={appSettings.profilePicture} alt="Profile" />
+              ) : (
+                <UserCircle size={40} />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-black text-ink">{displayName}</p>
+              <p className="mt-1 break-words text-sm font-bold text-slate-500">{displayEmail}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <label className="btn-secondary min-h-10 cursor-pointer px-3 text-sm">
+                  Upload picture
+                  <input className="sr-only" type="file" accept="image/*" onChange={(event) => onProfilePictureChange(event.target.files?.[0])} />
+                </label>
+                <button className="btn-secondary min-h-10 px-3 text-sm" type="button" onClick={onRemoveProfilePicture}>Remove</button>
+              </div>
+            </div>
+          </div>
+          <SettingsTextInput label="Name" value={appSettings.profileName} placeholder={authSession?.displayName || "Enter display name"} onChange={(value) => updateAppSetting("profileName", value)} />
+          <SettingsTextInput label="Email" value={appSettings.profileEmail} placeholder={authSession?.email || "Enter email"} type="email" onChange={(value) => updateAppSetting("profileEmail", value)} />
+        </SettingsSection>
+
+        <SettingsSection icon={KeyRound} title="Account" badge={authSession ? authSession.role : "Guest"}>
+          <SettingsInfo label="Password" value="Managed by the login form and stored as a secure backend hash" />
+          <SettingsInfo label="Session" value={authSession ? "Active in this browser" : "Login required for buying"} />
+          <SettingsToggle checked={appSettings.linkedEmail} label="Linked email account" detail="Use email as the primary request and notification identity." onChange={(value) => updateAppSetting("linkedEmail", value)} />
+          <SettingsToggle checked={appSettings.linkedGoogle} label="Linked Google account" detail="Reserved for a future Google sign-in integration." onChange={(value) => updateAppSetting("linkedGoogle", value)} />
+          <SettingsToggle checked={appSettings.linkedWhatsApp} label="Linked WhatsApp contact" detail="Use WhatsApp as a preferred customer support path." onChange={(value) => updateAppSetting("linkedWhatsApp", value)} />
+          {authSession ? (
+            <button className="btn-secondary mt-4 w-full" type="button" onClick={onSignOut}>
+              <LogOut size={18} />
+              Sign out
+            </button>
+          ) : (
+            <button className="btn-primary mt-4 w-full" type="button" onClick={onLogin}>
+              <UserCircle size={18} />
+              User login
+            </button>
+          )}
+        </SettingsSection>
+
+        <SettingsSection icon={Mail} title="Notifications" badge={emailEnabled ? "Enabled" : "Needs setup"}>
+          <SettingsToggle checked={appSettings.emailNotifications} label="Email notifications" detail="Send request, approval, and low-stock emails when provider settings are enabled." onChange={(value) => updateAppSetting("emailNotifications", value)} />
+          <SettingsToggle checked={appSettings.pushNotifications} label="Push notifications" detail="Reserved for browser push notifications after deployment." onChange={(value) => updateAppSetting("pushNotifications", value)} />
+          <SettingsToggle checked={appSettings.smsNotifications} label="SMS preferences" detail="Reserved for Twilio or another SMS provider integration." onChange={(value) => updateAppSetting("smsNotifications", value)} />
+          <SettingsToggle checked={appSettings.orderUpdates} label="Order/request updates" detail="Notify customers when their request status changes." onChange={(value) => updateAppSetting("orderUpdates", value)} />
+          <SettingsToggle checked={appSettings.lowStockAlerts} label="Low-stock alerts" detail="Alert admins when product stock falls below 5 units." onChange={(value) => updateAppSetting("lowStockAlerts", value)} />
+          <SettingsToggle checked={appSettings.promotionalMessages} label="Promotional messages" detail="Allow future product updates and offers." onChange={(value) => updateAppSetting("promotionalMessages", value)} />
+          {isAdmin ? (
+            <button className="btn-primary mt-4 w-full" type="button" onClick={onSendTestEmail}>
+              <Send size={18} />
+              Send test email
+            </button>
+          ) : null}
+        </SettingsSection>
+
+        <SettingsSection icon={ShieldCheck} title="Privacy" badge={appSettings.dataSharing ? "Shared" : "Private"}>
+          <SettingsToggle checked={appSettings.dataSharing} label="Data sharing" detail="Allow product request data to be used for internal reporting." onChange={(value) => updateAppSetting("dataSharing", value)} />
+          <SettingsToggle checked={appSettings.publicProfile} label="Profile visibility" detail="Keep your profile visible to admins handling your requests." onChange={(value) => updateAppSetting("publicProfile", value)} />
+          <SettingsToggle checked={appSettings.analyticsSharing} label="Analytics sharing" detail="Use anonymous browsing patterns to improve catalog layout." onChange={(value) => updateAppSetting("analyticsSharing", value)} />
+          <SettingsInfo label="Customer data" value="Buy requests stay inside the Antrocare database for admin review" />
+        </SettingsSection>
+
+        <SettingsSection icon={Sparkles} title="Appearance" badge={appSettings.appearanceMode}>
+          <SettingsSelect label="Mode" value={appSettings.appearanceMode} onChange={(value) => updateAppSetting("appearanceMode", value)}>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="system">System</option>
+          </SettingsSelect>
+          <SettingsSelect label="Theme" value={appSettings.themeColor} onChange={(value) => updateAppSetting("themeColor", value)}>
+            <option value="clinical">Clinical green</option>
+            <option value="ocean">Ocean blue</option>
+            <option value="coral">Coral accent</option>
+            <option value="neutral">Neutral</option>
+          </SettingsSelect>
+          <SettingsInfo label="Preview" value="Theme changes apply immediately to this browser" />
+        </SettingsSection>
+
+        <SettingsSection icon={Settings} title="Accessibility" badge={appSettings.highContrast ? "High contrast" : appSettings.fontSize}>
+          <SettingsSelect label="Font size" value={appSettings.fontSize} onChange={(value) => updateAppSetting("fontSize", value)}>
+            <option value="compact">Compact</option>
+            <option value="comfortable">Comfortable</option>
+            <option value="large">Large</option>
+          </SettingsSelect>
+          <SettingsToggle checked={appSettings.highContrast} label="High contrast" detail="Increase contrast for controls, panels, and text." onChange={(value) => updateAppSetting("highContrast", value)} />
+          <SettingsToggle checked={appSettings.screenReaderHints} label="Screen reader options" detail="Keep clearer labels and helper text visible for assistive technology." onChange={(value) => updateAppSetting("screenReaderHints", value)} />
+        </SettingsSection>
+
+        <SettingsSection icon={MapPin} title="Language And Region" badge={appSettings.timezone}>
+          <SettingsSelect label="Language" value={appSettings.language} onChange={(value) => updateAppSetting("language", value)}>
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="ta">Tamil</option>
+          </SettingsSelect>
+          <SettingsSelect label="Timezone" value={appSettings.timezone} onChange={(value) => updateAppSetting("timezone", value)}>
+            <option value="America/Chicago">America/Chicago</option>
+            <option value="America/New_York">America/New_York</option>
+            <option value="Asia/Kolkata">Asia/Kolkata</option>
+            <option value="UTC">UTC</option>
+          </SettingsSelect>
+          <SettingsSelect label="Date format" value={appSettings.dateFormat} onChange={(value) => updateAppSetting("dateFormat", value)}>
+            <option value="short">Short</option>
+            <option value="medium">Medium</option>
+            <option value="long">Long</option>
+          </SettingsSelect>
+          <SettingsInfo label="Preview" value={currentTimePreview} />
+        </SettingsSection>
+
+        <SettingsSection icon={KeyRound} title="Security" badge={appSettings.twoFactorEnabled ? "2FA on" : "Standard"}>
+          <SettingsToggle checked={appSettings.twoFactorEnabled} label="Two-factor authentication" detail="Reserve a second verification step for production login security." onChange={(value) => updateAppSetting("twoFactorEnabled", value)} />
+          <SettingsToggle checked={appSettings.loginAlerts} label="Login alerts" detail="Notify admins or users when a new login is detected." onChange={(value) => updateAppSetting("loginAlerts", value)} />
+          <SettingsToggle checked={appSettings.rememberDevice} label="Remember this device" detail="Keep local session convenience for trusted devices." onChange={(value) => updateAppSetting("rememberDevice", value)} />
+          <SettingsInfo label="Login history" value={authSession ? "Current browser session is active" : "No active login in this browser"} />
+          <SettingsInfo label="Main passcode" value="Set with ANTROCARE_ADMIN_KEY before deployment" />
+        </SettingsSection>
+
+      </div>
+    </main>
+  );
+}
+
+function SettingsSection({ icon: Icon, title, badge, children }) {
+  return (
+    <section className="surface-panel-padded">
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-emerald-50 text-clinical">
+            <Icon size={23} />
+          </span>
+          <h2 className="text-2xl font-black leading-tight">{title}</h2>
+        </div>
+        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black uppercase text-slate-500">{badge}</span>
+      </div>
+      <div className="grid gap-3">{children}</div>
+    </section>
+  );
+}
+
+function SettingsInfo({ label, value }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-white p-4">
+      <p className="text-xs font-black uppercase text-slate-500">{label}</p>
+      <p className="mt-1 break-words font-black text-ink">{value}</p>
+    </div>
+  );
+}
+
+function SettingsTextInput({ label, value, placeholder, type = "text", onChange }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-black text-slate-500">{label}</span>
+      <input className="field" type={type} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function SettingsSelect({ label, value, onChange, children }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-black text-slate-500">{label}</span>
+      <select className="field" value={value} onChange={(event) => onChange(event.target.value)}>
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function SettingsToggle({ checked, label, detail, onChange }) {
+  return (
+    <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-100 bg-white p-4">
+      <span>
+        <span className="block font-black text-ink">{label}</span>
+        <span className="mt-1 block text-sm font-semibold leading-6 text-slate-500">{detail}</span>
+      </span>
+      <input
+        className="mt-1 h-5 w-5 accent-emerald-600"
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
+  );
+}
+
+function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubmit, authSession, myPurchaseRequests, onBrowse, onSignOut }) {
   if (authSession) {
     return (
-      <main className="grid min-h-[calc(100vh-80px)] place-items-center px-4 py-12">
-        <section className="surface-panel-padded w-full max-w-xl">
-          <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-50 text-clinical">
-            <UserCircle size={28} />
+      <main className="mx-auto min-h-[calc(100vh-80px)] max-w-7xl px-4 py-12 lg:px-10">
+        <section className="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
+          <div className="surface-panel-padded">
+            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-50 text-clinical">
+              <UserCircle size={28} />
+            </div>
+            <p className="eyebrow">{authSession.role === "ADMIN" ? "Admin session" : "User account"}</p>
+            <h1 className="text-4xl font-black leading-tight">{authSession.displayName}</h1>
+            <p className="mt-3 font-bold text-slate-500">{authSession.email}</p>
+            <p className="mt-5 leading-7 text-slate-600">
+              {authSession.role === "ADMIN"
+                ? "This session can access the catalog, stock controls, sales dashboard, and admin pages."
+                : "Browse products, place buy requests, and track every request from this page."}
+            </p>
+            <div className="mt-6 grid gap-3">
+              <button className="btn-primary w-full" onClick={onBrowse} type="button">
+                <Store size={18} />
+                Browse products
+              </button>
+              <button className="btn-secondary w-full" onClick={onSignOut} type="button">
+                <LogOut size={18} />
+                Sign out
+              </button>
+            </div>
           </div>
-          <p className="eyebrow">{authSession.role === "ADMIN" ? "Admin session" : "User account"}</p>
-          <h1 className="text-4xl font-black leading-tight">{authSession.displayName}</h1>
-          <p className="mt-3 font-bold text-slate-500">{authSession.email}</p>
-          <p className="mt-5 leading-7 text-slate-600">
-            {authSession.role === "ADMIN"
-              ? "This session can access the catalog, stock controls, sales dashboard, and admin pages."
-              : "This session can browse products and send buy requests. Admin pages stay hidden for regular users."}
-          </p>
-          <button className="btn-secondary mt-6 w-full" onClick={onSignOut} type="button">
-            <LogOut size={18} />
-            Sign out
-          </button>
+
+          <div className="surface-panel-padded">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="eyebrow">My requests</p>
+                <h2 className="mt-1 text-3xl font-black leading-tight">Track your product requests.</h2>
+                <p className="mt-2 max-w-2xl font-semibold leading-7 text-slate-600">After you submit a buy request, Antrocare keeps it here and the team contacts you shortly.</p>
+              </div>
+              <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-black text-clinical">{myPurchaseRequests.length} saved</span>
+            </div>
+
+            <div className="mt-6 grid gap-4">
+              {myPurchaseRequests.length ? myPurchaseRequests.map((request) => (
+                <article className="rounded-lg border border-slate-100 bg-white p-4 shadow-sm" key={request.id}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-xl font-black text-ink">{request.productName}</h3>
+                      <p className="mt-1 text-sm font-bold text-slate-500">{request.productCategory} - {request.costSnapshot}</p>
+                    </div>
+                    <span className="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-black uppercase text-amber-700">{request.status}</span>
+                  </div>
+                  <div className="mt-4 grid gap-3 text-sm font-bold text-slate-600 sm:grid-cols-3">
+                    <span>Qty: <strong className="text-ink">{request.quantity}</strong></span>
+                    <span>Phone: <strong className="text-ink">{request.buyerPhone}</strong></span>
+                    <span>{formatRequestTime(request.createdAt)}</span>
+                  </div>
+                  <div className="mt-4 rounded-md bg-sky-50 p-3 text-sm font-bold leading-6 text-ocean">
+                    Next step: Antrocare will review this request and contact you using the phone number provided.
+                  </div>
+                  <RequestTimeline status={request.status} />
+                </article>
+              )) : (
+                <div className="empty-panel min-h-72">
+                  <div>
+                    <Clock3 className="mx-auto mb-3 text-clinical" size={34} />
+                    <p>No requests yet.</p>
+                    <button className="btn-primary mt-5" onClick={onBrowse} type="button">
+                      <Store size={18} />
+                      Start browsing
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </section>
       </main>
     );
@@ -920,6 +1825,24 @@ function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubm
         </button>
       </form>
     </main>
+  );
+}
+
+function RequestTimeline({ status }) {
+  const steps = ["Request placed", "Admin reviewed", "Customer contacted", "Completed"];
+  const activeIndex = status === "Completed" ? 3 : status === "Contacted" ? 2 : status === "Reviewed" ? 1 : 0;
+
+  return (
+    <div className="mt-4 grid gap-2 rounded-lg border border-slate-100 bg-white p-4 sm:grid-cols-4">
+      {steps.map((step, index) => (
+        <div className="flex items-center gap-2" key={step}>
+          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${index <= activeIndex ? "bg-clinical text-white" : "bg-slate-100 text-slate-400"}`}>
+            {index + 1}
+          </span>
+          <span className={`text-xs font-black uppercase ${index <= activeIndex ? "text-ink" : "text-slate-400"}`}>{step}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -972,7 +1895,13 @@ function AdminPage(props) {
             <p className="eyebrow">Dashboard overview</p>
             <h2 className="mt-1 text-3xl font-black leading-tight">Graphical inventory and sales summary.</h2>
           </div>
-          <span className="rounded-md bg-white px-3 py-2 text-sm font-black text-ocean shadow-sm">{props.purchaseRequests.length} buy requests</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="btn-secondary bg-white" type="button" onClick={props.onSendTestEmail}>
+              <Send size={18} />
+              Send test email
+            </button>
+            <span className="rounded-md bg-white px-3 py-2 text-sm font-black text-ocean shadow-sm">{props.purchaseRequests.length} buy requests</span>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -1000,6 +1929,8 @@ function AdminPage(props) {
           </div>
         </div>
       </section>
+
+      <ReorderPredictionPanel products={props.products} />
 
       {props.isMainAdmin ? (
         <>
@@ -1170,6 +2101,8 @@ function AdminPage(props) {
                   <th className="table-cell">Buyer</th>
                   <th className="table-cell">Contact</th>
                   <th className="table-cell">Qty</th>
+                  <th className="table-cell">Prescription</th>
+                  <th className="table-cell">Follow-up</th>
                   <th className="table-cell">Status</th>
                 </tr>
               </thead>
@@ -1189,7 +2122,26 @@ function AdminPage(props) {
                     </td>
                     <td className="table-cell font-black">{request.quantity}</td>
                     <td className="table-cell">
-                      <span className="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-black uppercase text-amber-700">{request.status}</span>
+                      {request.prescriptionUrl ? (
+                        <a className="font-black text-ocean hover:text-clinical" href={mediaUrl(request.prescriptionUrl)} target="_blank" rel="noreferrer">
+                          {request.prescriptionFileName || "Open file"}
+                        </a>
+                      ) : (
+                        <span className="text-sm font-bold text-slate-400">No file</span>
+                      )}
+                    </td>
+                    <td className="table-cell">
+                      <span className="rounded-md bg-sky-50 px-2.5 py-1 text-xs font-black uppercase text-ocean">
+                        {request.status === "New" ? "Call today" : request.status === "Reviewed" ? "Confirm fit" : request.status === "Contacted" ? "Close loop" : "Done"}
+                      </span>
+                    </td>
+                    <td className="table-cell">
+                      <select className="field min-w-36" value={request.status} onChange={(event) => props.onPurchaseStatusChange(request, event.target.value)}>
+                        <option>New</option>
+                        <option>Reviewed</option>
+                        <option>Contacted</option>
+                        <option>Completed</option>
+                      </select>
                     </td>
                   </tr>
                 ))}
@@ -1249,6 +2201,48 @@ function ProductApprovalPanel({ changes, onReview }) {
           </article>
         )) : (
           <div className="empty-panel min-h-48">No pending product changes.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ReorderPredictionPanel({ products }) {
+  const rows = products
+    .map((product) => {
+      const stock = Number(product.stockQuantity) || 0;
+      const sold = Number(product.unitsSold) || 0;
+      const urgency = sold * 2 + Math.max(0, 10 - stock);
+      const suggested = Math.max(10, sold * 2, stock < 5 ? 20 : 10);
+      return { product, stock, sold, urgency, suggested };
+    })
+    .filter((row) => row.stock < 10 || row.sold > 0)
+    .sort((left, right) => right.urgency - left.urgency)
+    .slice(0, 8);
+
+  return (
+    <section className="surface-panel-padded mt-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="eyebrow">Reorder prediction</p>
+          <h2 className="mt-1 text-2xl font-black">Products likely to need restocking.</h2>
+          <p className="mt-2 max-w-2xl font-semibold leading-7 text-slate-600">Prediction uses current stock and sales movement from this local catalog.</p>
+        </div>
+        <TrendingUp className="text-ocean" size={28} />
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {rows.length ? rows.map(({ product, stock, sold, suggested }) => (
+          <article className="rounded-lg border border-slate-100 bg-white p-4" key={product.id}>
+            <h3 className="font-black leading-tight">{product.name}</h3>
+            <p className="mt-1 text-sm font-bold text-slate-500">{product.category}</p>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-black uppercase">
+              <span className="rounded-md bg-slate-50 p-2">Stock<br />{stock}</span>
+              <span className="rounded-md bg-sky-50 p-2 text-ocean">Sold<br />{sold}</span>
+              <span className="rounded-md bg-emerald-50 p-2 text-clinical">Order<br />{suggested}</span>
+            </div>
+          </article>
+        )) : (
+          <div className="empty-panel min-h-40 md:col-span-2 xl:col-span-4">No reorder risk yet.</div>
         )}
       </div>
     </section>
@@ -1503,6 +2497,7 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
   const availableStock = Number(product.stockQuantity) || 0;
+  const guide = productGuideFor(product);
 
   return (
     <div
@@ -1529,6 +2524,18 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
         </div>
         <div className="p-4">
           <ProductImage product={product} imageSrc={imageSrc} brochureSrc={brochureSrc} full />
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-4">
+              <p className="text-xs font-black uppercase text-slate-500">Care instructions</p>
+              <ul className="mt-3 grid gap-2 text-sm font-semibold leading-6 text-slate-600">
+                {guide.care.map((item) => <li key={item}>- {item}</li>)}
+              </ul>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-4">
+              <p className="text-xs font-black uppercase text-slate-500">Size guide</p>
+              <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{guide.size}</p>
+            </div>
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4">
           <div>
@@ -1555,7 +2562,7 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
   );
 }
 
-function PurchaseModal({ product, draft, onChange, onClose, onSubmit, submitting }) {
+function PurchaseModal({ product, draft, onChange, onPrescriptionFile, onClose, onSubmit, submitting }) {
   const availableStock = Number(product.stockQuantity) || 0;
 
   return (
@@ -1575,11 +2582,26 @@ function PurchaseModal({ product, draft, onChange, onClose, onSubmit, submitting
           <div>
             <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
             <h2 className="mt-3 text-2xl font-black leading-tight text-ink">Buy {product.name}</h2>
-            <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{product.cost}</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{product.cost} - {availableStock} available</p>
           </div>
           <button className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-ink" onClick={onClose} type="button" aria-label="Close buy form">
             <X size={22} />
           </button>
+        </div>
+
+        <div className="grid gap-3 border-b border-slate-100 bg-slate-50/80 p-5 text-sm font-bold text-slate-600 sm:grid-cols-3">
+          <div className="rounded-md bg-white p-3">
+            <span className="mb-2 grid h-8 w-8 place-items-center rounded-md bg-emerald-50 text-clinical">1</span>
+            Submit request
+          </div>
+          <div className="rounded-md bg-white p-3">
+            <span className="mb-2 grid h-8 w-8 place-items-center rounded-md bg-sky-50 text-ocean">2</span>
+            Team reviews stock
+          </div>
+          <div className="rounded-md bg-white p-3">
+            <span className="mb-2 grid h-8 w-8 place-items-center rounded-md bg-amber-50 text-amber-700">3</span>
+            You get a call
+          </div>
         </div>
 
         <div className="grid gap-4 p-5 sm:grid-cols-2">
@@ -1601,13 +2623,23 @@ function PurchaseModal({ product, draft, onChange, onClose, onSubmit, submitting
             <span className="mt-2 block text-xs font-black uppercase text-slate-500">{availableStock} available</span>
           </label>
           <label className="block sm:col-span-2">
+            <span className="mb-2 block text-sm font-black text-slate-500">Prescription / doctor note</span>
+            <input
+              className="field py-3"
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(event) => onPrescriptionFile(event.target.files?.[0])}
+            />
+            {draft.prescriptionName ? <span className="mt-2 block text-xs font-black uppercase text-ocean">{draft.prescriptionName}{draft.prescriptionUrl ? " uploaded" : ""}</span> : null}
+          </label>
+          <label className="block sm:col-span-2">
             <span className="mb-2 block text-sm font-black text-slate-500">Notes</span>
             <textarea className="field min-h-28 resize-y py-3" value={draft.notes} onChange={(event) => onChange("notes", event.target.value)} />
           </label>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-5">
-          <span className="text-sm font-bold text-slate-500">The request will be saved for admin review.</span>
+          <span className="text-sm font-bold text-slate-500">Your request is saved to your account and the admin dashboard.</span>
           <button className="btn-primary min-h-11" type="submit" disabled={submitting}>
             <Send size={18} />
             {submitting ? "Saving..." : "Send buy request"}
@@ -1634,6 +2666,7 @@ function ContactSection() {
           <ContactLink icon={Phone} label="044 - 42082353" href="tel:+914442082353" />
           <ContactLink icon={Phone} label="044 - 43553381" href="tel:+914443553381" />
           <ContactLink icon={Phone} label="+91 94440 65691" href="tel:+919444065691" />
+          <ContactLink icon={MessageCircle} label="WhatsApp Antrocare" href={`${WHATSAPP_URL}?text=${encodeURIComponent("Hello Antrocare, I need help choosing a product.")}`} />
           <ContactLink icon={Mail} label="antro_ace@yahoo.co.in" href="mailto:antro_ace@yahoo.co.in" />
         </div>
       </div>
@@ -1642,8 +2675,9 @@ function ContactSection() {
 }
 
 function ContactLink({ icon: Icon, label, href }) {
+  const external = href.startsWith("http");
   return (
-    <a className="flex min-h-16 items-center gap-3 rounded-lg border border-white/10 bg-white/10 px-4 font-black transition hover:bg-white/15" href={href}>
+    <a className="flex min-h-16 items-center gap-3 rounded-lg border border-white/10 bg-white/10 px-4 font-black transition hover:bg-white/15" href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}>
       <Icon className="text-emerald-300" size={20} />
       {label}
     </a>
