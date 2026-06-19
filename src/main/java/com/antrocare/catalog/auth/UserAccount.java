@@ -24,6 +24,8 @@ public class UserAccount {
     @Column(nullable = false)
     private String email;
 
+    private String phone;
+
     @Column(nullable = false, length = 500)
     private String passwordHash;
 
@@ -37,10 +39,19 @@ public class UserAccount {
     }
 
     public UserAccount(String name, String email, String passwordHash) {
+        this(name, email, null, passwordHash, "USER");
+    }
+
+    public UserAccount(String name, String email, String passwordHash, String role) {
+        this(name, email, null, passwordHash, role);
+    }
+
+    public UserAccount(String name, String email, String phone, String passwordHash, String role) {
         this.name = name;
         this.email = email;
+        this.phone = phone;
         this.passwordHash = passwordHash;
-        this.role = "USER";
+        this.role = role;
         this.createdAt = Instant.now();
     }
 
@@ -54,6 +65,10 @@ public class UserAccount {
 
     public String getEmail() {
         return email;
+    }
+
+    public String getPhone() {
+        return phone;
     }
 
     public String getPasswordHash() {

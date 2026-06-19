@@ -20,7 +20,15 @@ Antrocare Enterprises/
 ## Run Backend
 
 ```bash
-./mvnw spring-boot:run
+./run-local.sh
+```
+
+`run-local.sh` loads private local settings from the git-ignored `.env.local` file before starting Spring Boot. Use `./mvnw spring-boot:run` when no local environment file is needed.
+
+For Google OAuth2, register this exact local redirect URI in Google Cloud Console:
+
+```text
+http://localhost:8081/login/oauth2/code/google
 ```
 
 Backend runs at:
@@ -63,7 +71,43 @@ Admin passcode:
 admin123
 ```
 
-Users can browse active products. Admins can update product costs and hide or show products. The brochure did not contain numeric prices, so all products start with `Price on request`.
+Users can browse active products after signing up or logging in. Buying a product requires a user session. Admins can update product costs, stock, visibility, and review saved buy requests. Products start at `₹50` with stock tracking enabled.
+
+Main admin controls approval. Product changes submitted by registered admins are saved as pending requests and do not update the live catalog until the main admin approves them. The main admin can approve or reject those requests from the admin dashboard. If an admin submits values that match the current product values, no approval request is created.
+
+The main admin can sign in by leaving the admin email blank and entering the main passcode. Only the main admin can create more admins. New admins are created with name, email, phone number, and password, then they can sign in with their email and password.
+
+## Local Email Alerts
+
+Low-stock alerts are sent when a product has less than 5 units available. Approval notifications are also sent to the registered admin who requested the change when the main admin approves or rejects it. The main notification email defaults to:
+
+```text
+sandeepkumar.parangi@gmail.com
+```
+
+Email is disabled by default for local development. Enable either SMTP or AWS SES before testing real inbox delivery. For Gmail SMTP, use a Gmail App Password, not your normal Gmail password.
+
+```bash
+export ANTROCARE_MAIL_ALERTS_ENABLED=true
+export ANTROCARE_ADMIN_EMAIL=sandeepkumar.parangi@gmail.com
+export SMTP_USERNAME=your-gmail-address@gmail.com
+export SMTP_PASSWORD=your-gmail-app-password
+./mvnw spring-boot:run
+```
+
+After signing in as admin, use **Send test email** on the admin dashboard to send a test message to `sandeepkumar.parangi@gmail.com`.
+
+Do not commit real SMTP passwords. Put private local values in `.env.local` or your terminal environment only.
+
+## Mobile App
+
+The frontend is configured as a Progressive Web App with:
+
+- Mobile viewport metadata
+- `manifest.webmanifest`
+- Service worker caching
+- Mobile bottom navigation
+- Install prompt banner on supported browsers
 
 ## API
 
@@ -72,7 +116,11 @@ GET /api/products
 GET /api/products?includeHidden=true   requires X-Admin-Key
 GET /api/categories
 GET /api/summary
-PATCH /api/products/{id}               requires X-Admin-Key
+POST /api/auth/signup
+POST /api/auth/login
+POST /api/auth/admin/login
+POST /api/purchase-requests            requires X-Auth-Token
+PATCH /api/products/{id}               requires admin X-Auth-Token or X-Admin-Key
 ```
 
 ## Deploy On Render

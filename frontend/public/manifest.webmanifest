@@ -1,0 +1,25 @@
+{
+  "name": "Antrocare Enterprises",
+  "short_name": "Antrocare",
+  "description": "Mobile catalog for orthopaedic, compression, and rehabilitation products.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbfdf8",
+  "theme_color": "#0f8a78",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/ace-logo.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/ace-logo.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

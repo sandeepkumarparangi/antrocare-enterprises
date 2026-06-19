@@ -42,6 +42,11 @@ public class PurchaseRequest {
     @Column(length = 500)
     private String notes;
 
+    private String prescriptionFileName;
+
+    @Column(length = 500)
+    private String prescriptionUrl;
+
     @Column(nullable = false)
     private String status;
 
@@ -61,6 +66,8 @@ public class PurchaseRequest {
         this.buyerEmail = normalizeOptional(request.buyerEmail());
         this.quantity = request.quantity();
         this.notes = normalizeOptional(request.notes());
+        this.prescriptionFileName = normalizeOptional(request.prescriptionFileName());
+        this.prescriptionUrl = normalizeOptional(request.prescriptionUrl());
         this.status = "New";
         this.createdAt = Instant.now();
     }
@@ -109,8 +116,20 @@ public class PurchaseRequest {
         return status;
     }
 
+    public String getPrescriptionFileName() {
+        return prescriptionFileName;
+    }
+
+    public String getPrescriptionUrl() {
+        return prescriptionUrl;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public void updateStatus(String status) {
+        this.status = status;
     }
 
     private static String normalizeOptional(String value) {

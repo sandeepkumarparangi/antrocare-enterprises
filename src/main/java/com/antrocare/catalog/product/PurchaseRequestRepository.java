@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface PurchaseRequestRepository extends JpaRepository<PurchaseRequest, Long> {
     List<PurchaseRequest> findAllByOrderByCreatedAtDesc();
+    List<PurchaseRequest> findByBuyerEmailIgnoreCaseOrderByCreatedAtDesc(String buyerEmail);
 }
