@@ -22,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final LoginAttemptService loginAttemptService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, LoginAttemptService loginAttemptService) {
         this.authService = authService;
+        this.loginAttemptService = loginAttemptService;
     }
 
     @PostMapping("/signup")
@@ -38,18 +40,32 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request) {
+        String attemptKey = "user:" + normalizeAttemptEmail(request.email());
         try {
-            return ResponseEntity.ok(AuthResponse.from(authService.loginUser(request.email(), request.password())));
+            loginAttemptService.assertAllowed(attemptKey);
+            AuthResponse response = AuthResponse.from(authService.loginUser(request.email(), request.password()));
+            loginAttemptService.recordSuccess(attemptKey);
+            return ResponseEntity.ok(response);
+        } catch (SecurityException error) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).build();
         } catch (IllegalArgumentException error) {
+            loginAttemptService.recordFailure(attemptKey);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
     }
 
     @PostMapping("/admin/login")
     public ResponseEntity<AuthResponse> adminLogin(@Valid @RequestBody AuthRequest request) {
+        String attemptKey = "admin:" + normalizeAttemptEmail(request.email());
         try {
-            return ResponseEntity.ok(AuthResponse.from(authService.loginAdmin(request.email(), request.password())));
+            loginAttemptService.assertAllowed(attemptKey);
+            AuthResponse response = AuthResponse.from(authService.loginAdmin(request.email(), request.password()));
+            loginAttemptService.recordSuccess(attemptKey);
+            return ResponseEntity.ok(response);
+        } catch (SecurityException error) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).build();
         } catch (IllegalArgumentException error) {
+            loginAttemptService.recordFailure(attemptKey);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
     }
@@ -99,5 +115,10 @@ public class AuthController {
         return authService.findValidSession(authToken)
             .map(session -> ResponseEntity.ok(AuthResponse.from(session)))
             .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+    }
+
+    private String normalizeAttemptEmail(String email) {
+        String normalized = email == null ? "" : email.trim().toLowerCase();
+        return normalized.isBlank() ? "main-admin" : normalized;
     }
 }

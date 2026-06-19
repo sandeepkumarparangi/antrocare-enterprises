@@ -69,6 +69,10 @@ export function fetchSummary() {
   return request("/api/summary");
 }
 
+export function fetchOAuth2Status() {
+  return request("/api/oauth2/status");
+}
+
 export function fetchPurchaseRequests(adminKey) {
   return request("/api/purchase-requests", { adminKey });
 }

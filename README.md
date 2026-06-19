@@ -20,7 +20,15 @@ Antrocare Enterprises/
 ## Run Backend
 
 ```bash
-./mvnw spring-boot:run
+./run-local.sh
+```
+
+`run-local.sh` loads private local settings from the git-ignored `.env.local` file before starting Spring Boot. Use `./mvnw spring-boot:run` when no local environment file is needed.
+
+For Google OAuth2, register this exact local redirect URI in Google Cloud Console:
+
+```text
+http://localhost:8081/login/oauth2/code/google
 ```
 
 Backend runs at:

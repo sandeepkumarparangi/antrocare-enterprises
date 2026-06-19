@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Clock3,
   Filter,
+  Info,
   KeyRound,
   LockKeyhole,
   LogOut,
@@ -31,7 +32,7 @@ import {
   UserPlus,
   X
 } from "lucide-react";
-import { approveProductChange, createPurchaseRequest, deleteAdminAccount, fetchAdminAccounts, fetchCategories, fetchCurrentSession, fetchMyPurchaseRequests, fetchProductChangeRequests, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, registerAdmin, rejectProductChange, sendTestEmail, signupUser, updateProduct, updatePurchaseRequestStatus, uploadPrescription } from "./api";
+import { API_BASE, approveProductChange, createPurchaseRequest, deleteAdminAccount, fetchAdminAccounts, fetchCategories, fetchCurrentSession, fetchMyPurchaseRequests, fetchOAuth2Status, fetchProductChangeRequests, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, registerAdmin, rejectProductChange, sendTestEmail, signupUser, updateProduct, updatePurchaseRequestStatus, uploadPrescription } from "./api";
 
 const AUTH_SESSION_KEY = "antrocare-auth-session";
 const APP_SETTINGS_KEY = "antrocare-app-settings";
@@ -199,6 +200,8 @@ function App() {
   const [productChangeRequests, setProductChangeRequests] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [adminQuery, setAdminQuery] = useState("");
+  const [adminSelectedCategory, setAdminSelectedCategory] = useState("All");
   const [selectedBodyArea, setSelectedBodyArea] = useState("all");
   const [selectedNeedType, setSelectedNeedType] = useState("all");
   const [compareIds, setCompareIds] = useState([]);
@@ -221,6 +224,7 @@ function App() {
   const [installDismissed, setInstallDismissed] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [oauth2Status, setOauth2Status] = useState({ enabled: false, providers: [] });
 
   const isAdmin = authSession?.role === "ADMIN" || authSession?.role === "MAIN_ADMIN";
   const isMainAdmin = Boolean(authSession?.mainAdmin);
@@ -239,8 +243,47 @@ function App() {
   }, [appSettings]);
 
   useEffect(() => {
+    fetchOAuth2Status()
+      .then(setOauth2Status)
+      .catch(() => setOauth2Status({ enabled: false, providers: [] }));
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthToken = params.get("oauthToken");
+    const oauthError = params.get("oauthError");
+
+    if (oauthError) {
+      setStatusMessage("OAuth2 sign-in failed because the provider did not return a verified email.");
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+      return;
+    }
+
+    if (!oauthToken) return;
+
+    const session = {
+      token: oauthToken,
+      role: params.get("oauthRole") || "USER",
+      email: params.get("oauthEmail") || "",
+      displayName: params.get("oauthName") || params.get("oauthEmail") || "User",
+      mainAdmin: params.get("oauthMainAdmin") === "true"
+    };
+    sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+    setAuthSession(session);
+    setStatusMessage("OAuth2 sign-in complete.");
+    setView("catalog");
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+  }, []);
+
+  useEffect(() => {
     loadCatalog(adminKey);
   }, [adminKey]);
+
+  useEffect(() => {
+    if (view !== "admin") return;
+    setAdminQuery("");
+    setAdminSelectedCategory("All");
+  }, [view]);
 
   useEffect(() => {
     refreshAdminAccounts();
@@ -345,6 +388,17 @@ function App() {
       return categoryMatch && textMatch && bodyMatch && needMatch && statusMatch && stockMatch;
     });
   }, [products, query, selectedCategory, selectedBodyArea, selectedNeedType, stockFilter, isAdmin]);
+
+  const adminVisibleProducts = useMemo(() => {
+    const normalizedQuery = adminQuery.trim().toLowerCase();
+
+    return products.filter((product) => {
+      const searchableText = `${product.name} ${product.category} ${product.useDescription || ""}`.toLowerCase();
+      const categoryMatch = adminSelectedCategory === "All" || product.category === adminSelectedCategory;
+      const queryMatch = !normalizedQuery || searchableText.includes(normalizedQuery);
+      return categoryMatch && queryMatch;
+    });
+  }, [products, adminQuery, adminSelectedCategory]);
 
   const compareProducts = useMemo(() => {
     return compareIds
@@ -777,6 +831,7 @@ function App() {
           updateUserDraft={updateUserDraft}
           onSubmit={handleUserAuth}
           authSession={authSession}
+          oauth2Status={oauth2Status}
           myPurchaseRequests={myPurchaseRequests}
           onBrowse={() => setView("catalog")}
           onSignOut={signOut}
@@ -797,12 +852,12 @@ function App() {
         />
       ) : (
         <AdminPage
-          products={visibleProducts}
+          products={adminVisibleProducts}
           categories={categories}
-          selectedCategory={selectedCategory}
-          setSelectedCategory={setSelectedCategory}
-          query={query}
-          setQuery={setQuery}
+          selectedCategory={adminSelectedCategory}
+          setSelectedCategory={setAdminSelectedCategory}
+          query={adminQuery}
+          setQuery={setAdminQuery}
           adminLoginDraft={adminLoginDraft}
           updateAdminLoginDraft={updateAdminLoginDraft}
           adminRegisterDraft={adminRegisterDraft}
@@ -871,36 +926,43 @@ function Header({ view, setView, authSession, isAdmin, isUser, onHeightChange, o
 
   return (
     <header ref={headerRef} className="app-header">
-      <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <button className="flex items-center gap-3 text-left" onClick={() => setView("catalog")}>
+      <div className="app-header-inner">
+        <button className="app-brand" onClick={() => setView("catalog")} type="button">
           <AceLogoMark />
           <span>
-            <span className="block text-lg font-black">Antrocare Enterprises</span>
-            <span className="block text-sm font-semibold text-slate-500">Orthopaedic care catalog and inventory</span>
+            <strong>Antrocare</strong>
+            <small>Orthopaedic care</small>
           </span>
         </button>
 
-        <nav className="flex flex-wrap gap-2">
-          <NavButton active={view === "catalog"} onClick={() => setView("catalog")} icon={Store} label="User catalog" />
+        <nav className="app-primary-nav" aria-label="Primary navigation">
+          <NavButton active={view === "catalog"} onClick={() => setView("catalog")} label="Products" />
+          <NavButton active={view === "account"} onClick={() => setView("account")} label={isUser ? "My requests" : "Account"} />
+          <NavButton active={view === "settings"} onClick={() => setView("settings")} label="Settings" />
           {isAdmin ? (
-            <NavButton active={view === "admin"} onClick={() => setView("admin")} icon={ShieldCheck} label="Admin console" />
+            <NavButton active={view === "admin"} onClick={() => setView("admin")} label="Admin console" />
           ) : null}
           {!isAdmin && !isUser ? (
-            <NavButton active={view === "admin"} onClick={() => setView("admin")} icon={ShieldCheck} label="Admin sign in" />
+            <NavButton active={view === "admin"} onClick={() => setView("admin")} label="Admin" />
           ) : null}
-          <NavButton active={view === "account"} onClick={() => setView("account")} icon={isUser ? UserCircle : UserPlus} label={authSession ? authSession.displayName : "User login"} />
-          <NavButton active={view === "settings"} onClick={() => setView("settings")} icon={Settings} label="Settings" />
+        </nav>
+
+        <div className="app-header-actions">
+          <a className="header-icon-button" href="#contact" aria-label="Contact Antrocare" title="Contact Antrocare">
+            <Mail size={19} />
+          </a>
           {authSession ? (
-            <button className="nav-pill" onClick={onSignOut} type="button">
+            <button className="account-action" onClick={onSignOut} type="button">
               <LogOut size={18} />
               Sign out
             </button>
-          ) : null}
-          <a className="nav-pill" href="#contact">
-            <Mail size={18} />
-            Contact
-          </a>
-        </nav>
+          ) : (
+            <button className="account-action" onClick={() => setView("account")} type="button">
+              <UserCircle size={19} />
+              Sign in
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );
@@ -914,10 +976,9 @@ function AceLogoMark() {
   );
 }
 
-function NavButton({ active, onClick, icon: Icon, label }) {
+function NavButton({ active, onClick, label }) {
   return (
     <button className={`nav-pill ${active ? "nav-pill-active" : ""}`} onClick={onClick} type="button">
-      <Icon size={18} />
       {label}
     </button>
   );
@@ -975,7 +1036,6 @@ function CatalogPage(props) {
   return (
     <main>
       <Hero summary={props.summary} />
-      <UniqueCareSuite products={props.products} onBuy={props.onBuy} onCompare={props.onCompare} />
       <CatalogControls {...props} />
       <CareFinder
         selectedBodyArea={props.selectedBodyArea}
@@ -986,6 +1046,7 @@ function CatalogPage(props) {
       <ComparisonPanel products={props.compareProducts} onBuy={props.onBuy} onClear={props.onClearCompare} />
       <ProductGrid
         products={props.products}
+        selectedCategory={props.selectedCategory}
         loading={props.loading}
         appSettings={props.appSettings}
         compareIds={props.compareIds}
@@ -994,59 +1055,44 @@ function CatalogPage(props) {
         onCompare={props.onCompare}
         onShowRequests={props.onShowRequests}
       />
+      <section className="advanced-care-heading">
+        <p className="eyebrow">Guided care tools</p>
+        <h2>More ways to find the right support.</h2>
+        <p>Use symptoms, treatment notes, or recovery goals to create a more focused shortlist.</p>
+      </section>
+      <UniqueCareSuite products={props.products} onBuy={props.onBuy} onCompare={props.onCompare} />
     </main>
   );
 }
 
 function CareFinder({ selectedBodyArea, setSelectedBodyArea, selectedNeedType, setSelectedNeedType }) {
   return (
-    <section className="mx-auto max-w-7xl px-4 pt-8 lg:px-10">
-      <div className="surface-panel-padded">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="eyebrow">Find product by pain area</p>
-            <h2 className="mt-1 text-3xl font-black leading-tight">Choose the body area and support need.</h2>
-            <p className="mt-2 max-w-2xl font-semibold leading-7 text-slate-600">
-              This guided finder narrows the catalog like an orthopaedic care assistant.
-            </p>
-          </div>
-          <Stethoscope className="text-clinical" size={32} />
-        </div>
-
-        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
-          <div>
-            <p className="mb-3 text-xs font-black uppercase text-slate-500">Body area</p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-              {BODY_AREAS.map((area) => (
-                <button
-                  className={`finder-tile ${selectedBodyArea === area.id ? "finder-tile-active" : ""}`}
-                  key={area.id}
-                  type="button"
-                  onClick={() => setSelectedBodyArea(area.id)}
-                >
-                  {area.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-3 text-xs font-black uppercase text-slate-500">Support need</p>
-            <div className="grid gap-2">
-              {NEED_TYPES.map((need) => (
-                <button
-                  className={`finder-tile text-left ${selectedNeedType === need.id ? "finder-tile-active" : ""}`}
-                  key={need.id}
-                  type="button"
-                  onClick={() => setSelectedNeedType(need.id)}
-                >
-                  {need.label}
-                </button>
-              ))}
-            </div>
-          </div>
+    <section className="guided-care-strip" aria-label="Guided product finder">
+      <div className="guided-care-copy">
+        <span><Sparkles size={20} /></span>
+        <div>
+          <strong>Not sure what fits?</strong>
+          <small>Choose a body area, then refine by support need.</small>
         </div>
       </div>
+      <div className="body-area-links">
+        {BODY_AREAS.map((area) => (
+          <button
+            className={selectedBodyArea === area.id ? "active" : ""}
+            key={area.id}
+            type="button"
+            onClick={() => setSelectedBodyArea(area.id)}
+          >
+            {area.label}
+          </button>
+        ))}
+      </div>
+      <label className="need-select">
+        <span>Support need</span>
+        <select value={selectedNeedType} onChange={(event) => setSelectedNeedType(event.target.value)}>
+          {NEED_TYPES.map((need) => <option key={need.id} value={need.id}>{need.label}</option>)}
+        </select>
+      </label>
     </section>
   );
 }
@@ -1109,40 +1155,21 @@ function Hero({ summary }) {
       <div className="hero-grid">
         <div className="hero-copy-panel">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-clinical shadow-sm">
-              <Sparkles size={16} />
-              Modern care catalog
+            <div className="inline-flex items-center gap-2 text-xs font-black uppercase text-clinical">
+              <Stethoscope size={16} />
+              Clinical product catalog
             </div>
-            <h1 className="mt-4 max-w-4xl text-3xl font-black leading-[1.04] tracking-tight text-ink sm:text-4xl md:text-5xl">
-              Orthopaedic products, stock, and customer requests in one place.
+            <h1>
+              Support for better movement.
             </h1>
-            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-              Browse care products with clear photos, live availability, mobile-friendly buying, and admin tools for inventory and sales.
+            <p>
+              Find orthopaedic products by body area, comfort need, and live availability.
             </p>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <a className="btn-primary" href="#products">
-                <Search size={19} />
-                Search catalog
-              </a>
-              <a className="btn-secondary" href="tel:+919444065691">
-                <Phone size={19} />
-                Call for quote
-              </a>
-            </div>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="hero-metrics" aria-label="Catalog summary">
             <Metric icon={Boxes} label="Products" value={summary.totalProducts} />
             <Metric icon={ClipboardList} label="Categories" value={summary.categories} />
-            <Metric icon={CheckCircle2} label="Active" value={summary.activeProducts} />
-          </div>
-        </div>
-        <div className="hero-media-panel">
-          <div className="relative">
-            <img src={mediaUrl("/rendered/page-01.png")} alt="Antrocare brochure cover" />
-            <div className="absolute inset-x-4 bottom-4 rounded-lg border border-white/70 bg-white/95 p-4 shadow-lg backdrop-blur">
-              <p className="text-xs font-black uppercase text-slate-500">Live catalog</p>
-              <p className="mt-1 text-lg font-black text-ink">A cleaner storefront with mobile access and real inventory signals.</p>
-            </div>
+            <Metric icon={CheckCircle2} label="Live stock" value={summary.activeProducts} />
           </div>
         </div>
       </div>
@@ -1294,10 +1321,12 @@ function EducationHub() {
 
 function Metric({ icon: Icon, label, value }) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 md:p-4">
-      <Icon className="text-clinical" size={20} />
-      <strong className="mt-3 block text-2xl font-black">{value}</strong>
-      <span className="text-xs font-bold uppercase text-slate-500">{label}</span>
+    <article className="metric-tile">
+      <Icon size={17} />
+      <span>
+        <strong className="block text-xl font-black leading-none">{value}</strong>
+        <span>{label}</span>
+      </span>
     </article>
   );
 }
@@ -1316,69 +1345,71 @@ function CatalogControls({ categories, categoryCounts, selectedCategory, setSele
       className="control-dock"
       style={{ top: headerHeight, scrollMarginTop: headerHeight + 16 }}
     >
-      <div className="mx-auto max-w-7xl">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] lg:items-center">
-          <div className="min-w-0">
-            <p className="eyebrow">Product catalog</p>
-            <h2 className="mt-1 text-xl font-black leading-tight tracking-tight md:text-2xl">Search by treatment area, support type, or product name.</h2>
-          </div>
-          <label className="relative block w-full">
-            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-            <input className="field pl-12" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search product or category" />
+      <div className="catalog-control-inner">
+        <div className="catalog-search-shell">
+          <label className="catalog-search-box">
+            <Search size={21} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search knee support, neck pain, walking aid..." />
+            {query ? (
+              <button type="button" onClick={() => setQuery("")} aria-label="Clear search">
+                <X size={18} />
+              </button>
+            ) : null}
           </label>
+          <span className="catalog-search-status"><PackageCheck size={18} /> Live inventory</span>
         </div>
 
-        <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-          {categories.map((category) => (
-            <button
-              className={`category-chip ${selectedCategory === category ? "category-chip-active" : ""}`}
-              key={category}
-              onClick={() => setSelectedCategory(category)}
-              type="button"
-            >
-              {category}
-              <span>{category === "All" ? products.length : categoryCounts[category] || 0}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-3 flex items-center gap-3 overflow-x-auto pb-1">
-          <span className="inline-flex shrink-0 items-center gap-2 text-xs font-black uppercase text-slate-500">
-            <Filter size={16} />
-            Availability
-          </span>
-          {stockFilters.map((filter) => (
-            <button
-              className={`filter-chip ${stockFilter === filter.id ? "filter-chip-active" : ""}`}
-              key={filter.id}
-              onClick={() => setStockFilter(filter.id)}
-              type="button"
-            >
-              {filter.label}
-            </button>
-          ))}
+        <div className="catalog-filter-bar">
+          <div className="catalog-category-scroll">
+            {categories.map((category) => (
+              <button
+                className={`category-chip ${selectedCategory === category ? "category-chip-active" : ""}`}
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                type="button"
+              >
+                {category === "All" ? "All products" : category}
+                <span>{category === "All" ? products.length : categoryCounts[category] || 0}</span>
+              </button>
+            ))}
+          </div>
+          <div className="stock-segment" aria-label="Stock filter">
+            {stockFilters.map((filter) => (
+              <button
+                className={stockFilter === filter.id ? "active" : ""}
+                key={filter.id}
+                onClick={() => setStockFilter(filter.id)}
+                type="button"
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function ProductGrid({ products, loading, appSettings, compareIds, onPreview, onBuy, onCompare, onShowRequests }) {
+function ProductGrid({ products, selectedCategory, loading, appSettings, compareIds, onPreview, onBuy, onCompare, onShowRequests }) {
   if (loading) {
-    return <div className="mx-auto max-w-7xl px-4 py-8 pb-16 lg:px-10"><div className="empty-panel">Loading catalog...</div></div>;
+    return <div className="catalog-results"><div className="empty-panel">Loading catalog...</div></div>;
   }
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-8 pb-16 lg:px-10">
-      <div className="mb-5 flex items-center justify-between gap-4 text-sm font-black text-slate-500">
-        <span>{products.length} products shown</span>
-        <button className="hidden items-center gap-2 rounded-md px-3 py-2 transition hover:bg-white hover:text-clinical md:flex" type="button" onClick={onShowRequests}>
+    <section className="catalog-results">
+      <div className="results-toolbar">
+        <div>
+          <h2>{selectedCategory === "All" ? "All products" : selectedCategory}</h2>
+          <span>{products.length} matching products</span>
+        </div>
+        <button className="my-requests-button" type="button" onClick={onShowRequests}>
           <Clock3 size={17} />
           My requests
         </button>
       </div>
       {products.length ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="product-grid-modern">
           {products.map((product) => (
             <ProductCard
               key={product.id}
@@ -1412,36 +1443,46 @@ function ProductCard({ product, compact, showSupportPrompts, selectedForCompare,
   return (
     <article className="product-card group">
       <button className="product-media-link" type="button" onClick={() => onPreview(product)} aria-label={`View ${product.name} image`}>
+        <span className={`product-stock-label ${availableStock === 0 ? "out" : availableStock < 5 ? "low" : ""}`}>
+          {availableStock === 0 ? "Out of stock" : availableStock < 5 ? `${availableStock} left` : "In stock"}
+        </span>
         <ProductImage product={product} imageSrc={imageSrc} brochureSrc={brochureSrc} />
         <span className="image-action-badge" aria-hidden="true">
           <Maximize2 size={16} />
         </span>
       </button>
-      <div className={compact ? "p-4" : "p-5"}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="status-chip bg-emerald-50 text-clinical">{product.category}</span>
+      <div className={compact ? "product-card-copy compact" : "product-card-copy"}>
+        <div className="product-card-meta">
+          <span>{product.category}</span>
           <span className={`stock-chip ${stockClass}`}>{availableStock} stock</span>
         </div>
-        <h3 className={`${compact ? "mt-3 min-h-0 text-lg" : "mt-4 min-h-14 text-xl"} font-black leading-tight`}>{product.name}</h3>
+        <h3>{product.name}</h3>
         {!compact && product.useDescription ? (
-          <p className="mt-3 min-h-12 text-sm font-semibold leading-6 text-slate-600">{product.useDescription}</p>
+          <p>{product.useDescription}</p>
         ) : null}
-        <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
-          <span className="text-xs font-black uppercase text-slate-500">Cost</span>
-          <strong className={`rounded-md px-2.5 py-1 ${product.cost === DEFAULT_COST ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-ocean"}`}>{product.cost}</strong>
-        </div>
-        <div className={`mt-4 grid gap-2 ${showSupportPrompts ? "sm:grid-cols-[1fr_auto]" : ""}`}>
-          <button className="btn-primary min-h-11" type="button" onClick={() => onBuy(product)} disabled={availableStock === 0}>
-            <ShoppingCart size={18} />
-            {availableStock === 0 ? "Unavailable" : "Buy"}
+        <div className="product-card-footer">
+          <div>
+            <small>Estimated price</small>
+            <strong>{product.cost}</strong>
+          </div>
+          <button className="view-product-button" type="button" onClick={() => onPreview(product)}>
+            View product
           </button>
-          {showSupportPrompts ? <a className="btn-secondary min-h-11 px-3" href={`${WHATSAPP_URL}?text=${encodeURIComponent(`I want to know more about ${product.name}`)}`} target="_blank" rel="noreferrer" aria-label={`Ask about ${product.name} on WhatsApp`}>
-            <MessageCircle size={18} />
-          </a> : null}
         </div>
-        <button className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-600 transition hover:border-ocean hover:text-ocean" type="button" onClick={() => onCompare(product)}>
-          {selectedForCompare ? "Remove from comparison" : "Compare product"}
-        </button>
+        <div className="product-quick-actions">
+          <button className={selectedForCompare ? "active" : ""} type="button" onClick={() => onCompare(product)} title={selectedForCompare ? "Remove from comparison" : "Compare product"}>
+            <ClipboardList size={17} />
+            {selectedForCompare ? "Comparing" : "Compare"}
+          </button>
+          {showSupportPrompts ? <a href={`${WHATSAPP_URL}?text=${encodeURIComponent(`I want to know more about ${product.name}`)}`} target="_blank" rel="noreferrer" aria-label={`Ask about ${product.name} on WhatsApp`} title="Ask on WhatsApp">
+            <MessageCircle size={18} />
+            Ask
+          </a> : null}
+          <button type="button" onClick={() => onBuy(product)} disabled={availableStock === 0} title="Buy product">
+            <ShoppingCart size={17} />
+            Buy
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -1513,11 +1554,11 @@ function SettingsPage({
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-12 lg:px-10">
-      <section className="grid gap-6 rounded-lg bg-gradient-to-br from-ink via-ocean to-clinical p-6 text-white shadow-soft lg:grid-cols-[minmax(0,1fr)_360px] lg:p-8">
+      <section className="workspace-hero grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div>
           <p className="eyebrow text-emerald-200">Settings</p>
-          <h1 className="max-w-4xl text-4xl font-black leading-tight md:text-6xl">Control app services, preferences, and access.</h1>
-          <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-300">
+          <h1 className="max-w-4xl text-3xl font-black leading-tight md:text-4xl">Control app services, preferences, and access.</h1>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
             Keep customer browsing simple, admin tools reachable, and operational services visible from one place.
           </p>
         </div>
@@ -1711,7 +1752,7 @@ function SettingsToggle({ checked, label, detail, onChange }) {
   );
 }
 
-function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubmit, authSession, myPurchaseRequests, onBrowse, onSignOut }) {
+function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubmit, authSession, oauth2Status, myPurchaseRequests, onBrowse, onSignOut }) {
   if (authSession) {
     return (
       <main className="mx-auto min-h-[calc(100vh-80px)] max-w-7xl px-4 py-12 lg:px-10">
@@ -1790,6 +1831,8 @@ function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubm
   }
 
   const isSignup = authMode === "signup";
+  const oauthProvider = oauth2Status?.providers?.[0] || "google";
+  const oauthUrl = `${API_BASE}/oauth2/authorization/${oauthProvider}`;
 
   return (
     <main className="grid min-h-[calc(100vh-80px)] place-items-center px-4 py-12">
@@ -1798,23 +1841,42 @@ function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubm
           {isSignup ? <UserPlus size={28} /> : <UserCircle size={28} />}
         </div>
         <p className="eyebrow">User access</p>
-        <h1 className="text-4xl font-black leading-tight">{isSignup ? "Create a user account." : "Sign in as a user."}</h1>
+        <h1 className="text-3xl font-black leading-tight">{isSignup ? "Create a user account." : "Sign in as a user."}</h1>
         <p className="mt-3 leading-7 text-slate-600">Users can browse products and send buy requests. Admin stock and sales tools remain private.</p>
 
+        {oauth2Status?.enabled ? (
+          <a className="google-login-button mt-6" href={oauthUrl}>
+            <img alt="" aria-hidden="true" className="h-5 w-5" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" />
+            Continue with Google
+          </a>
+        ) : (
+          <div className="mt-6 rounded-lg border border-slate-100 bg-slate-50 p-4 text-center text-sm font-bold leading-6 text-slate-500">
+            Google sign-in is temporarily unavailable.
+          </div>
+        )}
+        <div className="my-5 flex items-center gap-3 text-xs font-black uppercase text-slate-400">
+          <span className="h-px flex-1 bg-slate-200" />
+          Or use email
+          <span className="h-px flex-1 bg-slate-200" />
+        </div>
+
         {isSignup ? (
-          <label className="mt-6 block">
+          <label className="block">
             <span className="mb-2 block text-sm font-black text-slate-500">Name</span>
             <input className="field" value={userDraft.name} onChange={(event) => updateUserDraft("name", event.target.value)} required />
           </label>
         ) : null}
-        <label className={isSignup ? "mt-4 block" : "mt-6 block"}>
+        <label className={isSignup ? "mt-4 block" : "block"}>
           <span className="mb-2 block text-sm font-black text-slate-500">Email</span>
           <input className="field" type="email" value={userDraft.email} onChange={(event) => updateUserDraft("email", event.target.value)} required />
         </label>
         <label className="mt-4 block">
           <span className="mb-2 block text-sm font-black text-slate-500">Password</span>
-          <input className="field" type="password" minLength="6" value={userDraft.password} onChange={(event) => updateUserDraft("password", event.target.value)} required />
+          <input className="field" type="password" minLength={isSignup ? 8 : undefined} value={userDraft.password} onChange={(event) => updateUserDraft("password", event.target.value)} required />
         </label>
+        {isSignup ? (
+          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">Use 8+ characters with uppercase, lowercase, number, and symbol.</p>
+        ) : null}
 
         <button className="btn-primary mt-5 w-full" type="submit">
           {isSignup ? <UserPlus size={19} /> : <UserCircle size={19} />}
@@ -1870,11 +1932,11 @@ function AdminPage(props) {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-12 lg:px-10">
-      <section className="grid gap-6 rounded-lg bg-gradient-to-br from-ink via-ocean to-clinical p-6 text-white shadow-soft lg:grid-cols-[1fr_420px] lg:p-8">
+      <section className="workspace-hero grid gap-6 lg:grid-cols-[1fr_420px]">
         <div>
           <p className="eyebrow text-emerald-200">Admin console</p>
-          <h1 className="max-w-3xl text-4xl font-black leading-tight md:text-6xl">Manage pricing, visibility, and catalog freshness.</h1>
-          <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-300">
+          <h1 className="max-w-3xl text-3xl font-black leading-tight md:text-4xl">Manage pricing, visibility, and catalog freshness.</h1>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
             Update costs, hide unavailable products, and review buy requests saved in the database.
           </p>
         </div>
@@ -2297,8 +2359,9 @@ function AdminAccessPanel({ draft, updateDraft, onSubmit, adminAccounts, onDelet
           </label>
           <label className="mt-4 block">
             <span className="mb-2 block text-sm font-black text-slate-500">Temporary password</span>
-            <input className="field" type="password" minLength="6" value={draft.password} onChange={(event) => updateDraft("password", event.target.value)} required />
+            <input className="field" type="password" minLength="8" value={draft.password} onChange={(event) => updateDraft("password", event.target.value)} required />
           </label>
+          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">Use 8+ characters with uppercase, lowercase, number, and symbol.</p>
           <button className="btn-primary mt-5 w-full" type="submit">
             <ShieldCheck size={18} />
             Add admin
@@ -2474,7 +2537,7 @@ function AdminLogin({ adminLoginDraft, updateAdminLoginDraft, onLogin }) {
           <LockKeyhole size={26} />
         </div>
         <p className="eyebrow">Admin access</p>
-        <h1 className="text-4xl font-black leading-tight">Sign in to manage products.</h1>
+        <h1 className="text-3xl font-black leading-tight">Sign in to manage products.</h1>
         <p className="mt-3 leading-7 text-slate-600">Use the main admin passcode, or login with a registered admin email and password.</p>
         <label className="mt-6 block">
           <span className="mb-2 block text-sm font-black text-slate-500">Registered admin email</span>
@@ -2501,7 +2564,7 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
 
   return (
     <div
-      className="image-modal-backdrop"
+      className="image-modal-backdrop product-drawer-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label={`${product.name} image preview`}
@@ -2512,50 +2575,50 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
       }}
     >
       <div className="image-modal-panel">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4">
-          <div>
-            <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
-            <h2 className="mt-3 text-2xl font-black leading-tight text-ink">{product.name}</h2>
-            {product.useDescription ? <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600">{product.useDescription}</p> : null}
-          </div>
-          <button className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-ink" onClick={onClose} type="button" aria-label="Close image preview">
+        <div className="product-drawer-topbar">
+          <strong>Product details</strong>
+          <button className="header-icon-button" onClick={onClose} type="button" aria-label="Close image preview">
             <X size={22} />
           </button>
         </div>
-        <div className="p-4">
+        <div className="product-drawer-image">
           <ProductImage product={product} imageSrc={imageSrc} brochureSrc={brochureSrc} full />
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-4">
-              <p className="text-xs font-black uppercase text-slate-500">Care instructions</p>
-              <ul className="mt-3 grid gap-2 text-sm font-semibold leading-6 text-slate-600">
-                {guide.care.map((item) => <li key={item}>- {item}</li>)}
-              </ul>
-            </div>
-            <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-4">
-              <p className="text-xs font-black uppercase text-slate-500">Size guide</p>
-              <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{guide.size}</p>
-            </div>
-          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4">
-          <div>
-            <strong className={product.cost === DEFAULT_COST ? "text-coral" : "text-ocean"}>{product.cost}</strong>
-            <div className="mt-1 text-sm font-black text-slate-500">{availableStock} in stock</div>
+        <div className="product-drawer-content">
+          <p className="eyebrow">{product.category}</p>
+          <h2>{product.name}</h2>
+          {product.useDescription ? <p className="product-drawer-description">{product.useDescription}</p> : null}
+          <div className="product-drawer-facts">
+            <span><PackageCheck size={18} /><strong>{availableStock} available</strong></span>
+            <span><ShieldCheck size={18} /><strong>Admin verified</strong></span>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              className="btn-primary min-h-11"
-              type="button"
-              disabled={availableStock === 0}
-              onClick={() => {
-                onBuy(product);
-                onClose();
-              }}
-            >
-              <ShoppingCart size={18} />
-              Buy
-            </button>
+          <div className="product-guide-section">
+            <strong>Care instructions</strong>
+            <ul>
+              {guide.care.map((item) => <li key={item}>{item}</li>)}
+            </ul>
           </div>
+          <div className="product-guide-section">
+            <strong>Size guide</strong>
+            <p>{guide.size}</p>
+          </div>
+          <div className="product-drawer-price">
+            <span>Estimated price</span>
+            <strong>{product.cost}</strong>
+          </div>
+          <button
+            className="btn-primary w-full"
+            type="button"
+            disabled={availableStock === 0}
+            onClick={() => {
+              onBuy(product);
+              onClose();
+            }}
+          >
+            <ShoppingCart size={18} />
+            {availableStock === 0 ? "Currently unavailable" : "Request this product"}
+          </button>
+          <p className="clinical-use-note"><Info size={16} /> Product selection should follow professional clinical advice.</p>
         </div>
       </div>
     </div>
@@ -2652,7 +2715,7 @@ function PurchaseModal({ product, draft, onChange, onPrescriptionFile, onClose, 
 
 function ContactSection() {
   return (
-    <footer id="contact" className="bg-gradient-to-br from-ink via-slate-950 to-clinical px-4 py-12 text-white lg:px-10">
+    <footer id="contact" className="bg-ink px-4 py-12 text-white lg:px-10">
       <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_1.2fr]">
         <div>
           <p className="eyebrow text-emerald-200">Contact</p>

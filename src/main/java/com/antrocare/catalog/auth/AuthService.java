@@ -45,6 +45,7 @@ public class AuthService {
         if (normalizedEmail.isBlank() || userAccountRepository.existsByEmail(normalizedEmail)) {
             throw new IllegalArgumentException("Email is already registered.");
         }
+        validateStrongPassword(password);
 
         String displayName = name == null || name.isBlank() ? normalizedEmail : name.trim();
         UserAccount user = userAccountRepository.save(new UserAccount(displayName, normalizedEmail, hashPassword(password)));
@@ -88,9 +89,23 @@ public class AuthService {
         if (normalizedPhone.isBlank()) {
             throw new IllegalArgumentException("Phone number is required.");
         }
+        validateStrongPassword(password);
 
         String displayName = name == null || name.isBlank() ? normalizedEmail : name.trim();
         return userAccountRepository.save(new UserAccount(displayName, normalizedEmail, normalizedPhone, hashPassword(password), "ADMIN"));
+    }
+
+    public AuthSession loginOAuthUser(String name, String email) {
+        String normalizedEmail = normalizeEmail(email);
+        if (normalizedEmail.isBlank()) {
+            throw new IllegalArgumentException("OAuth2 provider did not return an email address.");
+        }
+
+        UserAccount user = userAccountRepository.findByEmail(normalizedEmail).orElseGet(() -> {
+            String displayName = name == null || name.isBlank() ? normalizedEmail : name.trim();
+            return userAccountRepository.save(new UserAccount(displayName, normalizedEmail, hashPassword(newToken())));
+        });
+        return createSession(user.getEmail(), user.getName(), user.getRole());
     }
 
     public List<UserAccount> listAdmins(String authToken) {
@@ -165,6 +180,19 @@ public class AuthService {
             return HASH_ITERATIONS + ":" + Base64.getEncoder().encodeToString(salt) + ":" + Base64.getEncoder().encodeToString(hash);
         } catch (Exception error) {
             throw new IllegalStateException("Could not hash password.", error);
+        }
+    }
+
+    private void validateStrongPassword(String password) {
+        String value = password == null ? "" : password;
+        boolean longEnough = value.length() >= 8;
+        boolean hasUpper = value.chars().anyMatch(Character::isUpperCase);
+        boolean hasLower = value.chars().anyMatch(Character::isLowerCase);
+        boolean hasDigit = value.chars().anyMatch(Character::isDigit);
+        boolean hasSymbol = value.chars().anyMatch(character -> !Character.isLetterOrDigit(character));
+
+        if (!(longEnough && hasUpper && hasLower && hasDigit && hasSymbol)) {
+            throw new IllegalArgumentException("Password must contain at least 8 characters, uppercase, lowercase, number, and symbol.");
         }
     }
 
