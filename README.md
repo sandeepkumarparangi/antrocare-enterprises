@@ -25,6 +25,30 @@ Antrocare Enterprises/
 
 `run-local.sh` loads private local settings from the git-ignored `.env.local` file before starting Spring Boot. Use `./mvnw spring-boot:run` when no local environment file is needed.
 
+### VS Code local startup
+
+OAuth is optional and disabled by default. A normal local backend must start without Google credentials:
+
+```bash
+./mvnw spring-boot:run
+```
+
+Do not add empty values for these properties to `application.properties` or the VS Code launch environment:
+
+```text
+spring.security.oauth2.client.registration.google.client-id
+spring.security.oauth2.client.registration.google.client-secret
+```
+
+Spring Boot treats an empty client ID as an invalid OAuth registration and stops the application context. To enable Google login, define both non-empty environment variables and enable OAuth:
+
+```bash
+export ANTROCARE_OAUTH2_ENABLED=true
+export SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID=your-client-id
+export SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET=your-client-secret
+./mvnw spring-boot:run
+```
+
 For Google OAuth2, register this exact local redirect URI in Google Cloud Console:
 
 ```text
