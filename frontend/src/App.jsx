@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   BadgeIndianRupee,
   Boxes,
   CheckCircle2,
@@ -1043,6 +1044,7 @@ function CatalogPage(props) {
         selectedNeedType={props.selectedNeedType}
         setSelectedNeedType={props.setSelectedNeedType}
       />
+      <MotionShowcase />
       <ComparisonPanel products={props.compareProducts} onBuy={props.onBuy} onClear={props.onClearCompare} />
       <ProductGrid
         products={props.products}
@@ -1062,6 +1064,67 @@ function CatalogPage(props) {
       </section>
       <UniqueCareSuite products={props.products} onBuy={props.onBuy} onCompare={props.onCompare} />
     </main>
+  );
+}
+
+function MotionShowcase() {
+  const collections = [
+    {
+      eyebrow: "Precision with purpose",
+      title: "Clinical insight, shaped around people.",
+      detail: "Antrocare combines thoughtful assessment, technical knowledge, and human understanding to support every care decision.",
+      visual: "/assets/antrocare-precision-care.png",
+      alt: "Antrocare clinician and customer reviewing a modern mobility assessment",
+      tone: "precision"
+    },
+    {
+      eyebrow: "Care that moves forward",
+      title: "Restoring confidence beyond the clinic.",
+      detail: "Our work connects professional care with real life, helping people return to movement, independence, and everyday possibility.",
+      visual: "/assets/antrocare-human-impact.png",
+      alt: "People moving confidently outside an Antrocare rehabilitation environment",
+      tone: "impact"
+    }
+  ];
+
+  return (
+    <section className="motion-showcase" aria-labelledby="motion-showcase-title">
+      <div className="motion-showcase-heading">
+        <div>
+          <p className="eyebrow">The Antrocare story</p>
+          <h2 id="motion-showcase-title">Technology guided by human care.</h2>
+        </div>
+        <p>We bring clinical precision and practical empathy together to help people move through life with greater confidence.</p>
+      </div>
+      <div className="motion-showcase-grid">
+        {collections.map((collection) => (
+          <article className={`motion-feature motion-feature-${collection.tone}`} key={collection.title}>
+            <div className="motion-feature-media">
+              <img
+                className="motion-brand-visual"
+                src={collection.visual}
+                alt={collection.alt}
+                width="1672"
+                height="941"
+                loading="lazy"
+              />
+              <span className="motion-scan" aria-hidden="true" />
+              <span className="motion-orbit" aria-hidden="true"><span /></span>
+              <span className="motion-frame-label" aria-hidden="true">Antrocare / {collection.tone === "precision" ? "Care intelligence" : "Human progress"}</span>
+            </div>
+            <div className="motion-feature-copy">
+              <p>{collection.eyebrow}</p>
+              <h3>{collection.title}</h3>
+              <span>{collection.detail}</span>
+              <a href="#contact">
+                Meet Antrocare
+                <ArrowRight size={16} />
+              </a>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
