@@ -181,7 +181,7 @@ jobs:
         uses: actions/checkout@v4
         
       - name: Run Trivy vulnerability scanner
-        use: aquasecurity/trivy-action@0.25.0
+        uses: aquasecurity/trivy-action@0.25.0
         with:
           image-ref: ${{ needs.docker-build.outputs.image-tag }}
           format: 'table'
