@@ -176,6 +176,7 @@ function createEmptyPurchaseDraft(session = null) {
     buyerPhone: "",
     buyerEmail: session?.email || "",
     quantity: 1,
+    selectedSize: "",
     prescriptionName: "",
     prescriptionUrl: "",
     notes: ""
@@ -807,6 +808,7 @@ function App() {
       buyerPhone: purchaseDraft.buyerPhone.trim(),
       buyerEmail: purchaseDraft.buyerEmail.trim(),
       quantity,
+      selectedSize: purchaseDraft.selectedSize.trim(),
       notes: [
         purchaseDraft.notes.trim(),
         purchaseDraft.prescriptionName ? `Doctor note/prescription: ${purchaseDraft.prescriptionName}` : ""
@@ -817,6 +819,11 @@ function App() {
 
     if (!request.buyerName || !request.buyerPhone) {
       setStatusMessage("Name and phone are required for buying.");
+      return;
+    }
+
+    if (!request.selectedSize) {
+      setStatusMessage("Please select one size before sending the buy request.");
       return;
     }
 
@@ -1935,6 +1942,7 @@ function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubm
                   </div>
                   <div className="mt-4 grid gap-3 text-sm font-bold text-slate-600 sm:grid-cols-3">
                     <span>Qty: <strong className="text-ink">{request.quantity}</strong></span>
+                    <span>Size: <strong className="text-ink">{request.selectedSize || "Not selected"}</strong></span>
                     <span>Phone: <strong className="text-ink">{request.buyerPhone}</strong></span>
                     <span>{formatRequestTime(request.createdAt)}</span>
                   </div>
@@ -2307,6 +2315,7 @@ function AdminPage(props) {
                     <td className="table-cell">
                       <div className="font-black">{request.productName}</div>
                       <div className="mt-1 text-sm font-bold text-slate-500">{request.productCategory} - {request.costSnapshot}</div>
+                      {request.selectedSize ? <div className="mt-2 inline-flex rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">Size: {request.selectedSize}</div> : null}
                       {request.notes ? <div className="mt-2 max-w-md text-sm font-semibold text-slate-500">{request.notes}</div> : null}
                     </td>
                     <td className="table-cell font-black">{request.buyerName}</td>
@@ -2838,6 +2847,7 @@ function SizeGuideModal({ product, onClose }) {
 
 function PurchaseModal({ product, draft, onChange, onPrescriptionFile, onClose, onSubmit, submitting }) {
   const availableStock = Number(product.stockQuantity) || 0;
+  const sizeGuide = sizeGuideFor(product);
 
   return (
     <div
@@ -2851,7 +2861,7 @@ function PurchaseModal({ product, draft, onChange, onPrescriptionFile, onClose, 
         }
       }}
     >
-      <form className="w-full max-w-2xl overflow-hidden rounded-lg border border-white/20 bg-white shadow-2xl" onSubmit={onSubmit}>
+      <form className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-white/20 bg-white shadow-2xl" onSubmit={onSubmit}>
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
           <div>
             <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
@@ -2896,6 +2906,33 @@ function PurchaseModal({ product, draft, onChange, onPrescriptionFile, onClose, 
             <input className="field" type="number" min="1" max={Math.min(99, availableStock)} value={draft.quantity} onChange={(event) => onChange("quantity", event.target.value)} required />
             <span className="mt-2 block text-xs font-black uppercase text-slate-500">{availableStock} available</span>
           </label>
+          <fieldset className="sm:col-span-2">
+            <legend className="mb-2 block text-sm font-black text-slate-500">Select size</legend>
+            <p className="mb-3 text-sm font-semibold leading-6 text-slate-500">{sizeGuide.measurement}</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {sizeGuide.rows.map((row) => {
+                const sizeValue = `${row.label} - ${row.age}, ${row.height}, ${row.weight}`;
+                const checked = draft.selectedSize === sizeValue;
+                return (
+                  <label className={`size-choice-card ${checked ? "selected" : ""}`} key={`${product.id}-purchase-${row.label}`}>
+                    <input
+                      type="radio"
+                      name="selectedSize"
+                      value={sizeValue}
+                      checked={checked}
+                      onChange={(event) => onChange("selectedSize", event.target.value)}
+                      required
+                    />
+                    <span>
+                      <strong>{row.label}</strong>
+                      <small>{row.age} | {row.height} | {row.weight}</small>
+                      <em>{row.fit}</em>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
           <label className="block sm:col-span-2">
             <span className="mb-2 block text-sm font-black text-slate-500">Prescription / doctor note</span>
             <input

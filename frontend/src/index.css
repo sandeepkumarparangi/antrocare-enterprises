@@ -1225,6 +1225,59 @@
     border-top: 1px solid #edf0ef;
   }
 
+  .size-choice-card {
+    min-height: 6.35rem;
+    padding: 0.85rem;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: flex-start;
+    border: 1px solid #dce3e0;
+    border-radius: 0.5rem;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  }
+
+  .size-choice-card:hover,
+  .size-choice-card.selected {
+    border-color: #087b68;
+    background: #f2f8f6;
+    box-shadow: 0 10px 24px rgba(8, 123, 104, 0.1);
+  }
+
+  .size-choice-card input {
+    margin-top: 0.2rem;
+    accent-color: #087b68;
+  }
+
+  .size-choice-card span {
+    min-width: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .size-choice-card strong {
+    color: #18211f;
+    font-size: 1rem;
+    font-weight: 900;
+  }
+
+  .size-choice-card small {
+    color: #087b68;
+    font-size: 0.72rem;
+    font-weight: 900;
+    line-height: 1.35;
+  }
+
+  .size-choice-card em {
+    color: #65716e;
+    font-size: 0.75rem;
+    font-style: normal;
+    font-weight: 650;
+    line-height: 1.4;
+  }
+
   .product-drawer-price {
     margin: 1.15rem 0 0.75rem;
     display: flex;

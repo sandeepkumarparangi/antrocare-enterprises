@@ -39,6 +39,9 @@ public class PurchaseRequest {
 
     private int quantity;
 
+    @Column(nullable = false)
+    private String selectedSize;
+
     @Column(length = 500)
     private String notes;
 
@@ -65,6 +68,7 @@ public class PurchaseRequest {
         this.buyerPhone = request.buyerPhone().trim();
         this.buyerEmail = normalizeOptional(request.buyerEmail());
         this.quantity = request.quantity();
+        this.selectedSize = request.selectedSize().trim();
         this.notes = normalizeOptional(request.notes());
         this.prescriptionFileName = normalizeOptional(request.prescriptionFileName());
         this.prescriptionUrl = normalizeOptional(request.prescriptionUrl());
@@ -106,6 +110,10 @@ public class PurchaseRequest {
 
     public int getQuantity() {
         return quantity;
+    }
+
+    public String getSelectedSize() {
+        return selectedSize;
     }
 
     public String getNotes() {
