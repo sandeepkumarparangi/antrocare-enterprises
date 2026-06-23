@@ -132,3 +132,6 @@ This repo includes a `Dockerfile` and `render.yaml` for a single public Render w
 3. Use the root `Dockerfile`.
 4. Render provides `PORT`; the app reads it automatically.
 5. Set `ANTROCARE_ADMIN_KEY` in Render to choose the admin passcode for the deployed site.
+
+## CI Pipeline Test
+*Last tested: 2026-06-23 20:06:03 UTC*
