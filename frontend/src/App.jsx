@@ -19,6 +19,7 @@ import {
   MessageCircle,
   PackageCheck,
   Phone,
+  Ruler,
   Search,
   Send,
   Settings,
@@ -90,6 +91,37 @@ const SIZE_GUIDE = {
   "Waist / Abdominal Supports": "Measure around the abdomen where the belt will sit.",
   default: "Measure the supported body area snugly, without compressing skin."
 };
+const SIZE_RECOMMENDATIONS = {
+  pediatric: [
+    { label: "Child XS", age: "1-3 years", height: "75-95 cm", weight: "8-14 kg", fit: "Small pediatric supports, collars, cuffs, and soft braces." },
+    { label: "Child S", age: "4-6 years", height: "96-115 cm", weight: "15-22 kg", fit: "Child collars, arm slings, and light spinal supports." },
+    { label: "Child M", age: "7-10 years", height: "116-140 cm", weight: "23-36 kg", fit: "Most pediatric braces, supports, and therapy aids." },
+    { label: "Teen", age: "11-15 years", height: "141-165 cm", weight: "37-55 kg", fit: "Teen-size braces or smaller adult supports." }
+  ],
+  adultSupport: [
+    { label: "S", age: "16+ years", height: "145-160 cm", weight: "40-55 kg", fit: "Slim adult frame or shorter support length." },
+    { label: "M", age: "16+ years", height: "161-172 cm", weight: "56-72 kg", fit: "Average adult frame and standard support length." },
+    { label: "L", age: "16+ years", height: "173-184 cm", weight: "73-90 kg", fit: "Broader adult frame or longer support length." },
+    { label: "XL", age: "16+ years", height: "185+ cm", weight: "91-115 kg", fit: "Large adult frame with wider straps or circumference." }
+  ],
+  compression: [
+    { label: "S", age: "16+ years", height: "145-160 cm", weight: "40-55 kg", fit: "Slim limb circumference with gentle compression fit." },
+    { label: "M", age: "16+ years", height: "161-172 cm", weight: "56-72 kg", fit: "Average limb circumference and daily compression fit." },
+    { label: "L", age: "16+ years", height: "173-184 cm", weight: "73-90 kg", fit: "Broader limb circumference with secure compression fit." },
+    { label: "XL", age: "16+ years", height: "185+ cm", weight: "91-115 kg", fit: "Large limb circumference or post-surgical swelling range." }
+  ],
+  mobility: [
+    { label: "Short", age: "12+ years", height: "125-150 cm", weight: "30-55 kg", fit: "Short walkers, sticks, and crutches." },
+    { label: "Regular", age: "16+ years", height: "151-175 cm", weight: "45-85 kg", fit: "Standard mobility aids and everyday walking support." },
+    { label: "Tall", age: "16+ years", height: "176-195 cm", weight: "60-110 kg", fit: "Tall walking aids with extended height adjustment." }
+  ],
+  footwear: [
+    { label: "S", age: "10+ years", height: "120-155 cm", weight: "30-55 kg", fit: "Foot size 3-5 UK or slim ankle profile." },
+    { label: "M", age: "14+ years", height: "156-172 cm", weight: "45-75 kg", fit: "Foot size 6-8 UK or average ankle profile." },
+    { label: "L", age: "16+ years", height: "173-188 cm", weight: "70-95 kg", fit: "Foot size 9-10 UK or broad ankle profile." },
+    { label: "XL", age: "16+ years", height: "189+ cm", weight: "90-115 kg", fit: "Foot size 11+ UK or extra broad ankle profile." }
+  ]
+};
 const DEFAULT_APP_SETTINGS = {
   profileName: "",
   profileEmail: "",
@@ -144,6 +176,7 @@ function createEmptyPurchaseDraft(session = null) {
     buyerPhone: "",
     buyerEmail: session?.email || "",
     quantity: 1,
+    selectedSize: "",
     prescriptionName: "",
     prescriptionUrl: "",
     notes: ""
@@ -163,6 +196,34 @@ function productGuideFor(product) {
   return {
     care: CARE_GUIDE[product.category] || CARE_GUIDE.default,
     size: SIZE_GUIDE[product.category] || SIZE_GUIDE.default
+  };
+}
+
+function sizeGuideFor(product) {
+  const searchableText = `${product.name} ${product.category}`.toLowerCase();
+  let type = "adultSupport";
+  if (searchableText.includes("pediatric") || searchableText.includes("child") || searchableText.includes("torticollis") || searchableText.includes("head holder")) {
+    type = "pediatric";
+  } else if (searchableText.includes("walker") || searchableText.includes("crutch") || searchableText.includes("walking stick")) {
+    type = "mobility";
+  } else if (searchableText.includes("stocking") || searchableText.includes("compression") || searchableText.includes("garment") || searchableText.includes("lymphedema")) {
+    type = "compression";
+  } else if (searchableText.includes("ankle") || searchableText.includes("foot") || searchableText.includes("heel") || searchableText.includes("insole") || searchableText.includes("toe")) {
+    type = "footwear";
+  }
+
+  const measurementByType = {
+    pediatric: "Confirm the child's supported body-area circumference before final selection.",
+    adultSupport: SIZE_GUIDE[product.category] || SIZE_GUIDE.default,
+    compression: "Measure limb circumference in the morning before swelling increases.",
+    mobility: "Measure from wrist crease to floor while standing upright.",
+    footwear: "Match shoe size first, then confirm ankle or foot circumference."
+  };
+
+  return {
+    type,
+    measurement: measurementByType[type],
+    rows: SIZE_RECOMMENDATIONS[type]
   };
 }
 
@@ -217,6 +278,7 @@ function App() {
   const [userDraft, setUserDraft] = useState({ name: "", email: "", password: "" });
   const [statusMessage, setStatusMessage] = useState("");
   const [previewProduct, setPreviewProduct] = useState(null);
+  const [sizeGuideProduct, setSizeGuideProduct] = useState(null);
   const [buyingProduct, setBuyingProduct] = useState(null);
   const [pendingPurchaseProduct, setPendingPurchaseProduct] = useState(null);
   const [purchaseDraft, setPurchaseDraft] = useState(createEmptyPurchaseDraft);
@@ -306,7 +368,7 @@ function App() {
   }, [authSession?.token]);
 
   useEffect(() => {
-    if (!previewProduct && !buyingProduct) return undefined;
+    if (!previewProduct && !sizeGuideProduct && !buyingProduct) return undefined;
 
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -323,7 +385,7 @@ function App() {
       document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [previewProduct, buyingProduct]);
+  }, [previewProduct, sizeGuideProduct, buyingProduct]);
 
   useEffect(() => {
     function captureInstallPrompt(event) {
@@ -746,6 +808,7 @@ function App() {
       buyerPhone: purchaseDraft.buyerPhone.trim(),
       buyerEmail: purchaseDraft.buyerEmail.trim(),
       quantity,
+      selectedSize: purchaseDraft.selectedSize.trim(),
       notes: [
         purchaseDraft.notes.trim(),
         purchaseDraft.prescriptionName ? `Doctor note/prescription: ${purchaseDraft.prescriptionName}` : ""
@@ -756,6 +819,11 @@ function App() {
 
     if (!request.buyerName || !request.buyerPhone) {
       setStatusMessage("Name and phone are required for buying.");
+      return;
+    }
+
+    if (!request.selectedSize) {
+      setStatusMessage("Please select one size before sending the buy request.");
       return;
     }
 
@@ -818,6 +886,7 @@ function App() {
           compareIds={compareIds}
           loading={loading}
           onPreview={setPreviewProduct}
+          onShowSizeGuide={setSizeGuideProduct}
           onBuy={openPurchaseModal}
           onCompare={toggleCompare}
           onClearCompare={() => setCompareIds([])}
@@ -883,7 +952,8 @@ function App() {
       )}
 
       {statusMessage ? <Toast message={statusMessage} onClose={() => setStatusMessage("")} /> : null}
-      {previewProduct ? <ImagePreviewModal product={previewProduct} onClose={() => setPreviewProduct(null)} onBuy={openPurchaseModal} /> : null}
+      {previewProduct ? <ImagePreviewModal product={previewProduct} onClose={() => setPreviewProduct(null)} onBuy={openPurchaseModal} onShowSizeGuide={setSizeGuideProduct} /> : null}
+      {sizeGuideProduct ? <SizeGuideModal product={sizeGuideProduct} onClose={() => setSizeGuideProduct(null)} /> : null}
       {buyingProduct ? (
         <PurchaseModal
           product={buyingProduct}
@@ -1053,6 +1123,7 @@ function CatalogPage(props) {
         appSettings={props.appSettings}
         compareIds={props.compareIds}
         onPreview={props.onPreview}
+        onShowSizeGuide={props.onShowSizeGuide}
         onBuy={props.onBuy}
         onCompare={props.onCompare}
         onShowRequests={props.onShowRequests}
@@ -1454,7 +1525,7 @@ function CatalogControls({ categories, categoryCounts, selectedCategory, setSele
   );
 }
 
-function ProductGrid({ products, selectedCategory, loading, appSettings, compareIds, onPreview, onBuy, onCompare, onShowRequests }) {
+function ProductGrid({ products, selectedCategory, loading, appSettings, compareIds, onPreview, onShowSizeGuide, onBuy, onCompare, onShowRequests }) {
   if (loading) {
     return <div className="catalog-results"><div className="empty-panel">Loading catalog...</div></div>;
   }
@@ -1481,6 +1552,7 @@ function ProductGrid({ products, selectedCategory, loading, appSettings, compare
               showSupportPrompts={appSettings.showSupportPrompts}
               selectedForCompare={compareIds.includes(product.id)}
               onPreview={onPreview}
+              onShowSizeGuide={onShowSizeGuide}
               onBuy={onBuy}
               onCompare={onCompare}
             />
@@ -1493,7 +1565,7 @@ function ProductGrid({ products, selectedCategory, loading, appSettings, compare
   );
 }
 
-function ProductCard({ product, compact, showSupportPrompts, selectedForCompare, onPreview, onBuy, onCompare }) {
+function ProductCard({ product, compact, showSupportPrompts, selectedForCompare, onPreview, onShowSizeGuide, onBuy, onCompare }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
   const availableStock = Number(product.stockQuantity) || 0;
@@ -1536,6 +1608,10 @@ function ProductCard({ product, compact, showSupportPrompts, selectedForCompare,
           <button className={selectedForCompare ? "active" : ""} type="button" onClick={() => onCompare(product)} title={selectedForCompare ? "Remove from comparison" : "Compare product"}>
             <ClipboardList size={17} />
             {selectedForCompare ? "Comparing" : "Compare"}
+          </button>
+          <button type="button" onClick={() => onShowSizeGuide(product)} title="Open age, height, and weight size guide">
+            <Ruler size={17} />
+            Size
           </button>
           {showSupportPrompts ? <a href={`${WHATSAPP_URL}?text=${encodeURIComponent(`I want to know more about ${product.name}`)}`} target="_blank" rel="noreferrer" aria-label={`Ask about ${product.name} on WhatsApp`} title="Ask on WhatsApp">
             <MessageCircle size={18} />
@@ -1866,6 +1942,7 @@ function AccountPage({ authMode, setAuthMode, userDraft, updateUserDraft, onSubm
                   </div>
                   <div className="mt-4 grid gap-3 text-sm font-bold text-slate-600 sm:grid-cols-3">
                     <span>Qty: <strong className="text-ink">{request.quantity}</strong></span>
+                    <span>Size: <strong className="text-ink">{request.selectedSize || "Not selected"}</strong></span>
                     <span>Phone: <strong className="text-ink">{request.buyerPhone}</strong></span>
                     <span>{formatRequestTime(request.createdAt)}</span>
                   </div>
@@ -2238,6 +2315,7 @@ function AdminPage(props) {
                     <td className="table-cell">
                       <div className="font-black">{request.productName}</div>
                       <div className="mt-1 text-sm font-bold text-slate-500">{request.productCategory} - {request.costSnapshot}</div>
+                      {request.selectedSize ? <div className="mt-2 inline-flex rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">Size: {request.selectedSize}</div> : null}
                       {request.notes ? <div className="mt-2 max-w-md text-sm font-semibold text-slate-500">{request.notes}</div> : null}
                     </td>
                     <td className="table-cell font-black">{request.buyerName}</td>
@@ -2619,7 +2697,7 @@ function AdminLogin({ adminLoginDraft, updateAdminLoginDraft, onLogin }) {
   );
 }
 
-function ImagePreviewModal({ product, onClose, onBuy }) {
+function ImagePreviewModal({ product, onClose, onBuy, onShowSizeGuide }) {
   const imageSrc = mediaUrl(product.imageUrl);
   const brochureSrc = mediaUrl(product.brochureUrl);
   const availableStock = Number(product.stockQuantity) || 0;
@@ -2664,6 +2742,10 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
           <div className="product-guide-section">
             <strong>Size guide</strong>
             <p>{guide.size}</p>
+            <button className="size-guide-inline-button" type="button" onClick={() => onShowSizeGuide(product)}>
+              <Ruler size={17} />
+              View age, height, and weight chart
+            </button>
           </div>
           <div className="product-drawer-price">
             <span>Estimated price</span>
@@ -2688,8 +2770,84 @@ function ImagePreviewModal({ product, onClose, onBuy }) {
   );
 }
 
+function SizeGuideModal({ product, onClose }) {
+  const guide = sizeGuideFor(product);
+
+  return (
+    <div
+      className="image-modal-backdrop size-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${product.name} size guide`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div className="size-modal-panel">
+        <div className="size-modal-header">
+          <span className="size-modal-icon"><Ruler size={24} /></span>
+          <div>
+            <p className="eyebrow">{product.category}</p>
+            <h2>{product.name} size guide</h2>
+          </div>
+          <button className="header-icon-button" onClick={onClose} type="button" aria-label="Close size guide">
+            <X size={22} />
+          </button>
+        </div>
+
+        <div className="size-measurement-note">
+          <strong>How to choose</strong>
+          <p>{guide.measurement}</p>
+        </div>
+
+        <div className="size-guide-table-wrap">
+          <table className="size-guide-table">
+            <thead>
+              <tr>
+                <th>Size</th>
+                <th>Age</th>
+                <th>Height</th>
+                <th>Weight</th>
+                <th>Best fit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {guide.rows.map((row) => (
+                <tr key={`${product.id}-${row.label}`}>
+                  <td><strong>{row.label}</strong></td>
+                  <td>{row.age}</td>
+                  <td>{row.height}</td>
+                  <td>{row.weight}</td>
+                  <td>{row.fit}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="size-guide-cards">
+          {guide.rows.map((row) => (
+            <article key={`${product.id}-${row.label}-card`}>
+              <strong>{row.label}</strong>
+              <span>{row.age}</span>
+              <span>{row.height}</span>
+              <span>{row.weight}</span>
+              <p>{row.fit}</p>
+            </article>
+          ))}
+        </div>
+
+        <p className="clinical-use-note"><Info size={16} /> This guide is a quick reference. Final fitting should follow body measurements and clinical advice.</p>
+      </div>
+    </div>
+  );
+}
+
 function PurchaseModal({ product, draft, onChange, onPrescriptionFile, onClose, onSubmit, submitting }) {
   const availableStock = Number(product.stockQuantity) || 0;
+  const sizeGuide = sizeGuideFor(product);
 
   return (
     <div
@@ -2703,7 +2861,7 @@ function PurchaseModal({ product, draft, onChange, onPrescriptionFile, onClose, 
         }
       }}
     >
-      <form className="w-full max-w-2xl overflow-hidden rounded-lg border border-white/20 bg-white shadow-2xl" onSubmit={onSubmit}>
+      <form className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-white/20 bg-white shadow-2xl" onSubmit={onSubmit}>
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
           <div>
             <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-black uppercase text-clinical">{product.category}</span>
@@ -2748,6 +2906,33 @@ function PurchaseModal({ product, draft, onChange, onPrescriptionFile, onClose, 
             <input className="field" type="number" min="1" max={Math.min(99, availableStock)} value={draft.quantity} onChange={(event) => onChange("quantity", event.target.value)} required />
             <span className="mt-2 block text-xs font-black uppercase text-slate-500">{availableStock} available</span>
           </label>
+          <fieldset className="sm:col-span-2">
+            <legend className="mb-2 block text-sm font-black text-slate-500">Select size</legend>
+            <p className="mb-3 text-sm font-semibold leading-6 text-slate-500">{sizeGuide.measurement}</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {sizeGuide.rows.map((row) => {
+                const sizeValue = `${row.label} - ${row.age}, ${row.height}, ${row.weight}`;
+                const checked = draft.selectedSize === sizeValue;
+                return (
+                  <label className={`size-choice-card ${checked ? "selected" : ""}`} key={`${product.id}-purchase-${row.label}`}>
+                    <input
+                      type="radio"
+                      name="selectedSize"
+                      value={sizeValue}
+                      checked={checked}
+                      onChange={(event) => onChange("selectedSize", event.target.value)}
+                      required
+                    />
+                    <span>
+                      <strong>{row.label}</strong>
+                      <small>{row.age} | {row.height} | {row.weight}</small>
+                      <em>{row.fit}</em>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
           <label className="block sm:col-span-2">
             <span className="mb-2 block text-sm font-black text-slate-500">Prescription / doctor note</span>
             <input

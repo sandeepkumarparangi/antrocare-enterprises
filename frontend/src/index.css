@@ -916,7 +916,7 @@
   .product-quick-actions {
     margin-top: 0.55rem;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.35rem;
   }
 
@@ -1085,6 +1085,197 @@
     content: "•";
     margin-right: 0.45rem;
     color: #087b68;
+  }
+
+  .size-guide-inline-button {
+    margin-top: 0.75rem;
+    min-height: 2.35rem;
+    width: 100%;
+    padding: 0 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    border-radius: 0.375rem;
+    color: #087b68;
+    background: #e6f5f1;
+    font-size: 0.76rem;
+    font-weight: 900;
+  }
+
+  .size-guide-inline-button:hover {
+    color: #fff;
+    background: #087b68;
+  }
+
+  .size-modal-backdrop {
+    background: rgba(10, 24, 34, 0.58);
+  }
+
+  .size-modal-panel {
+    width: min(58rem, calc(100vw - 2rem));
+    max-height: min(88vh, 48rem);
+    overflow-y: auto;
+    border-radius: 0.5rem;
+    background: #fff;
+    box-shadow: 0 26px 70px rgba(8, 26, 37, 0.28);
+  }
+
+  .size-modal-header {
+    padding: 1.2rem;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.85rem;
+    align-items: center;
+    border-bottom: 1px solid #dce3e0;
+    background: linear-gradient(135deg, #f8fbfa, #eef8f5);
+  }
+
+  .size-modal-icon {
+    width: 3rem;
+    height: 3rem;
+    display: grid;
+    place-items: center;
+    border-radius: 0.5rem;
+    color: #087b68;
+    background: #dff4ee;
+  }
+
+  .size-modal-header h2 {
+    margin: 0.2rem 0 0;
+    color: #18211f;
+    font-size: 1.45rem;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+
+  .size-measurement-note {
+    margin: 1rem 1.2rem 0;
+    padding: 0.9rem 1rem;
+    border-left: 3px solid #087b68;
+    background: #f5f7f6;
+  }
+
+  .size-measurement-note strong {
+    color: #18211f;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+  }
+
+  .size-measurement-note p {
+    margin: 0.35rem 0 0;
+    color: #65716e;
+    font-size: 0.86rem;
+    font-weight: 650;
+    line-height: 1.55;
+  }
+
+  .size-guide-table-wrap {
+    margin: 1rem 1.2rem 0;
+    overflow-x: auto;
+    border: 1px solid #dce3e0;
+    border-radius: 0.5rem;
+  }
+
+  .size-guide-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 46rem;
+  }
+
+  .size-guide-table th,
+  .size-guide-table td {
+    padding: 0.85rem;
+    border-bottom: 1px solid #edf0ef;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .size-guide-table th {
+    color: #087b68;
+    background: #f2f8f6;
+    font-size: 0.7rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .size-guide-table td {
+    color: #4f5b57;
+    font-size: 0.82rem;
+    font-weight: 650;
+    line-height: 1.45;
+  }
+
+  .size-guide-table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .size-guide-table td strong {
+    color: #18211f;
+    font-size: 0.94rem;
+  }
+
+  .size-guide-cards {
+    display: none;
+  }
+
+  .size-modal-panel .clinical-use-note {
+    margin: 1rem 1.2rem 1.2rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid #edf0ef;
+  }
+
+  .size-choice-card {
+    min-height: 6.35rem;
+    padding: 0.85rem;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: flex-start;
+    border: 1px solid #dce3e0;
+    border-radius: 0.5rem;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  }
+
+  .size-choice-card:hover,
+  .size-choice-card.selected {
+    border-color: #087b68;
+    background: #f2f8f6;
+    box-shadow: 0 10px 24px rgba(8, 123, 104, 0.1);
+  }
+
+  .size-choice-card input {
+    margin-top: 0.2rem;
+    accent-color: #087b68;
+  }
+
+  .size-choice-card span {
+    min-width: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .size-choice-card strong {
+    color: #18211f;
+    font-size: 1rem;
+    font-weight: 900;
+  }
+
+  .size-choice-card small {
+    color: #087b68;
+    font-size: 0.72rem;
+    font-weight: 900;
+    line-height: 1.35;
+  }
+
+  .size-choice-card em {
+    color: #65716e;
+    font-size: 0.75rem;
+    font-style: normal;
+    font-weight: 650;
+    line-height: 1.4;
   }
 
   .product-drawer-price {
@@ -1920,6 +2111,74 @@
     flex-direction: column;
     gap: 0.08rem;
     font-size: 0.55rem;
+  }
+
+  .size-modal-panel {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 0.5rem 0.5rem 0 0;
+  }
+
+  .size-modal-header {
+    padding: 1rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .size-modal-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .size-modal-header h2 {
+    font-size: 1.05rem;
+  }
+
+  .size-measurement-note {
+    margin: 0.8rem 0.9rem 0;
+    padding: 0.75rem;
+  }
+
+  .size-guide-table-wrap {
+    display: none;
+  }
+
+  .size-guide-cards {
+    margin: 0.8rem 0.9rem 0;
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .size-guide-cards article {
+    padding: 0.85rem;
+    display: grid;
+    gap: 0.35rem;
+    border: 1px solid #dce3e0;
+    border-radius: 0.5rem;
+    background: #fff;
+  }
+
+  .size-guide-cards strong {
+    color: #18211f;
+    font-size: 1rem;
+    font-weight: 900;
+  }
+
+  .size-guide-cards span {
+    color: #087b68;
+    font-size: 0.72rem;
+    font-weight: 900;
+  }
+
+  .size-guide-cards p {
+    margin: 0.1rem 0 0;
+    color: #65716e;
+    font-size: 0.75rem;
+    font-weight: 650;
+    line-height: 1.45;
+  }
+
+  .size-modal-panel .clinical-use-note {
+    margin: 0.85rem 0.9rem 1rem;
   }
 
   .advanced-care-heading {
