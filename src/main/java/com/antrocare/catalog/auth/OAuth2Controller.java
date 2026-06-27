@@ -15,10 +15,12 @@ public class OAuth2Controller {
     private final String providers;
 
     public OAuth2Controller(
-        @Value("${antrocare.oauth2.enabled:false}") boolean enabled,
+        @Value("${antrocare.oauth2.enabled:}") String enabled,
+        @Value("${spring.security.oauth2.client.registration.google.client-id:}") String googleClientId,
+        @Value("${spring.security.oauth2.client.registration.google.client-secret:}") String googleClientSecret,
         @Value("${antrocare.oauth2.providers:google}") String providers
     ) {
-        this.enabled = enabled;
+        this.enabled = oauth2Enabled(enabled, googleClientId, googleClientSecret);
         this.providers = providers;
     }
 
@@ -31,5 +33,16 @@ public class OAuth2Controller {
                 .filter(provider -> !provider.isBlank())
                 .toList()
         );
+    }
+
+    private boolean oauth2Enabled(String configuredValue, String googleClientId, String googleClientSecret) {
+        if (configuredValue != null && !configuredValue.isBlank()) {
+            return Boolean.parseBoolean(configuredValue.trim());
+        }
+        return hasText(googleClientId) && hasText(googleClientSecret);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

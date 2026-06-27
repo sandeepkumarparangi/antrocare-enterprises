@@ -157,5 +157,25 @@ This repo includes a `Dockerfile` and `render.yaml` for a single public Render w
 4. Render provides `PORT`; the app reads it automatically.
 5. Set `ANTROCARE_ADMIN_KEY` in Render to choose the admin passcode for the deployed site.
 
+<<<<<<< HEAD
+
 ## CI Pipeline Test
-*Last tested: 2026-06-23 20:06:03 UTC*
+
+# _Last tested: 2026-06-23 20:06:03 UTC_
+
+```bash
+ANTROCARE_FRONTEND_URL=https://antrocare-enterprises.onrender.com
+ANTROCARE_ALLOWED_ORIGINS=https://antrocare-enterprises.onrender.com
+ANTROCARE_OAUTH2_ENABLED=true
+SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID=your-google-client-id
+SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET=your-google-client-secret
+SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_REDIRECT_URI={baseUrl}/login/oauth2/code/{registrationId}
+```
+
+`ANTROCARE_OAUTH2_ENABLED` can be omitted when both Google client variables are present; the app auto-enables Google login from those credentials. Set it to `false` only when you intentionally want to hide Google login.
+
+In Google Cloud Console, add this exact Authorized redirect URI for the Render service:
+
+```text
+https://antrocare-enterprises.onrender.com/login/oauth2/code/google
+```

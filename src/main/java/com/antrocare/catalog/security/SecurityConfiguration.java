@@ -27,11 +27,13 @@ public class SecurityConfiguration {
 
     public SecurityConfiguration(
         @Value("${antrocare.allowed-origins}") String allowedOrigins,
-        @Value("${antrocare.oauth2.enabled:false}") boolean oauth2Enabled,
+        @Value("${antrocare.oauth2.enabled:}") String oauth2Enabled,
+        @Value("${spring.security.oauth2.client.registration.google.client-id:}") String googleClientId,
+        @Value("${spring.security.oauth2.client.registration.google.client-secret:}") String googleClientSecret,
         OAuth2LoginSuccessHandler oauth2LoginSuccessHandler
     ) {
         this.allowedOrigins = allowedOrigins;
-        this.oauth2Enabled = oauth2Enabled;
+        this.oauth2Enabled = oauth2Enabled(oauth2Enabled, googleClientId, googleClientSecret);
         this.oauth2LoginSuccessHandler = oauth2LoginSuccessHandler;
     }
 
@@ -76,6 +78,17 @@ public class SecurityConfiguration {
         }
 
         return http.build();
+    }
+
+    private boolean oauth2Enabled(String configuredValue, String googleClientId, String googleClientSecret) {
+        if (configuredValue != null && !configuredValue.isBlank()) {
+            return Boolean.parseBoolean(configuredValue.trim());
+        }
+        return hasText(googleClientId) && hasText(googleClientSecret);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     @Bean
