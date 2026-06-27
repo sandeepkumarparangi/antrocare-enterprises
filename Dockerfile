@@ -13,6 +13,8 @@ COPY mvnw pom.xml ./
 COPY .mvn .mvn
 RUN chmod +x mvnw && ./mvnw -q -DskipTests dependency:go-offline
 COPY src ./src
+RUN echo "===== AntrocareException.java =====" && \
+    cat src/main/java/com/antrocare/catalog/exception/AntrocareException.java
 COPY --from=frontend-build /workspace/frontend/dist/ ./src/main/resources/static/
 RUN ./mvnw -q -DskipTests package
 
