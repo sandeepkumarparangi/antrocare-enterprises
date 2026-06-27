@@ -424,7 +424,8 @@ function App() {
       setStockAlerts(stockAlertData);
       setStatusMessage("");
     } catch (error) {
-      setStatusMessage("Could not load catalog. Make sure the Spring Boot server is running on port 8081.");
+      console.error("Catalog load failed:", error);
+      setStatusMessage(`Could not load catalog: ${error.message}`);
     } finally {
       setLoading(false);
     }
