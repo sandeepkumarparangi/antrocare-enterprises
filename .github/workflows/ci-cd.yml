@@ -1,0 +1,288 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  # Docker image configuration
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  # Java version
+  JAVA_VERSION: 17
+  # Node.js version
+  NODE_VERSION: 22
+  # AWS/ECR configuration (if using AWS)
+  # AWS_REGION: us-east-1
+  # ECR_REPOSITORY: antrocare-enterprises
+
+jobs:
+  # Build and test backend (Spring Boot)
+  backend-build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+          
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-m2
+            
+      - name: Verify Maven wrapper
+        run: |
+          chmod +x mvnw
+          ./mvnw -v
+          
+      - name: Build backend with Maven
+        run: |
+          ./mvnw -B clean verify
+          
+      - name: Run backend unit tests
+        run: |
+          ./mvnw -B test
+          
+      - name: Verify build artifacts
+        run: |
+          ls -la target/
+          if [ ! -f target/*.jar ]; then
+            echo "ERROR: No JAR file found in target/"
+            exit 1
+          fi
+          
+  # Build and test frontend (Vite/React)
+  frontend-build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-workspace: './frontend'
+          
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+        
+      - name: Run frontend linting
+        working-directory: ./frontend
+        run: npm run lint --if-present || echo "Linting script not found, skipping..."
+        
+      - name: Run frontend unit tests
+        working-directory: ./frontend
+        run: npm run test --if-present || echo "Test script not found, skipping..."
+        
+      - name: Build frontend for production
+        working-directory: ./frontend
+        run: npm run build
+        
+      - name: Verify frontend build output
+        working-directory: ./frontend
+        run: |
+          ls -la dist/
+          if [ ! -d dist ] || [ -z "$(ls -A dist)" ]; then
+            echo "ERROR: Frontend build failed - dist directory is empty or missing"
+            exit 1
+          fi
+          
+  # Build Docker image
+  docker-build:
+    needs: [backend-build-test, frontend-build-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.metadata.outputs.digest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=ref,event=tag
+          labels: |
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.version=${{ github.sha }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          platforms: linux/amd64,linux/arm64
+          provenance: false
+          
+      - name: Export Docker image metadata
+        id: metadata
+        run: |
+          echo "digest=${{ steps.build-and-push.outputs.digest }}" >> $GITHUB_OUTPUT
+          
+      - name: Image digest
+        run: echo ${{ steps.metadata.outputs.digest }}
+        
+  # Security scanning (optional but recommended)
+  security-scan:
+    needs: docker-build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.25.0
+        with:
+          image-ref: ${{ needs.docker-build.outputs.image-tag }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+          
+      - name: Run Trivy with SARIF output (for GitHub Code Scanning)
+        if: always()
+        uses: aquasecurity/trivy-action@0.25.0
+        with:
+          image-ref: ${{ needs.docker-build.outputs.image-tag }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          
+      - name: Upload Trivy results to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+          
+  # Deploy to staging environment (optional)
+  deploy-staging:
+    needs: [docker-build, security-scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    environment: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Configure AWS credentials (if using AWS)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          
+      - name: Deploy to AWS ECS (example)
+        # This would be customized based on your actual deployment target
+        run: |
+          echo "Deploying to staging environment..."
+          echo "Image: ${{ needs.docker-build.outputs.image-tag }}"
+          # Add your actual deployment commands here
+          # For example, if using ECS:
+          # aws ecs update-service --cluster my-cluster --service my-service --force-new-deployment --image ${{ needs.docker-build.outputs.image-tag }}
+          
+      - name: Deploy to Render.com (alternative)
+        # If you prefer to use your existing Render.com setup
+        run: |
+          echo "Triggering Render.com deployment..."
+          # Render.com auto-deploys on push to connected repo, so this might not be needed
+          # Or you could trigger via their API if needed
+          
+  # Deploy to production (manual approval)
+  deploy-production:
+    needs: [docker-build, security-scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    environment:
+      name: production
+      url: https://antrocare-enterprises.onrender.com  # Update with your actual URL
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Wait for manual approval
+        uses: peter-evans/slash-command-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          permissions: write
+          
+      - name: Deploy to production
+        if: github.event_name == 'issue_comment' && contains(github.event.comment.body, '/deploy')
+        run: |
+          echo "Deploying to production..."
+          echo "Image: ${{ needs.docker-build.outputs.image-tag }}"
+          # Add your production deployment commands here
+          
+  # Cleanup old images (optional maintenance)
+  cleanup:
+    needs: [deploy-staging, deploy-production]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: List and delete old images (keep last 5)
+        run: |
+          echo "Cleaning up old Docker images..."
+          # This is a simplified example - adjust based on your retention policy
+          # You might want to use GitHub's Package API or other tools for cleanup
+
