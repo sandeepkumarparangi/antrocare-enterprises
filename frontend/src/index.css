@@ -1463,6 +1463,28 @@
     animation-name: brand-cinematic-drift-reverse;
   }
 
+  .motion-brand-visual-animated,
+  .motion-feature-impact .motion-brand-visual-animated {
+    animation: none;
+  }
+
+  .motion-media-badge {
+    position: absolute;
+    z-index: 3;
+    top: 1rem;
+    left: 1rem;
+    padding: 0.42rem 0.58rem;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 999px;
+    color: #fff;
+    background: rgba(8, 123, 104, 0.85);
+    font-size: 0.58rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    backdrop-filter: blur(8px);
+  }
+
   .motion-scan {
     position: absolute;
     z-index: 2;

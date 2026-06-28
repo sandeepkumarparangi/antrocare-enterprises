@@ -1289,19 +1289,21 @@ function MotionShowcase() {
   const collections = [
     {
       eyebrow: "Precision with purpose",
-      title: "Clinical insight, shaped around people.",
-      detail: "Antrocare combines thoughtful assessment, technical knowledge, and human understanding to support every care decision.",
-      visual: "/assets/antrocare-precision-care.png",
-      alt: "Antrocare clinician and customer reviewing a modern mobility assessment",
-      tone: "precision"
+      title: "Support zones across the recovery journey.",
+      detail: "A fast visual loop across cervical, spine, knee, and ankle support categories gives customers a clearer sense of the range Antrocare covers.",
+      visual: "/assets/gifs/clinical-support-loop.gif",
+      alt: "Animated loop of cervical, spine, knee, and ankle orthopaedic support products",
+      tone: "precision",
+      animated: true
     },
     {
       eyebrow: "Care that moves forward",
-      title: "Restoring confidence beyond the clinic.",
-      detail: "Our work connects professional care with real life, helping people return to movement, independence, and everyday possibility.",
-      visual: "/assets/antrocare-human-impact.png",
-      alt: "People moving confidently outside an Antrocare rehabilitation environment",
-      tone: "impact"
+      title: "Mobility aids that bring movement back.",
+      detail: "This loop highlights walkers, crutches, and walking sticks to reinforce Antrocare's rehabilitation and independence-focused offering.",
+      visual: "/assets/gifs/mobility-recovery-loop.gif",
+      alt: "Animated loop of rehabilitation aids including walkers, crutches, and walking sticks",
+      tone: "impact",
+      animated: true
     }
   ];
 
@@ -1319,13 +1321,14 @@ function MotionShowcase() {
           <article className={`motion-feature motion-feature-${collection.tone}`} key={collection.title}>
             <div className="motion-feature-media">
               <img
-                className="motion-brand-visual"
+                className={`motion-brand-visual ${collection.animated ? "motion-brand-visual-animated" : ""}`}
                 src={collection.visual}
                 alt={collection.alt}
                 width="1672"
                 height="941"
                 loading="lazy"
               />
+              {collection.animated ? <span className="motion-media-badge" aria-hidden="true">GIF preview</span> : null}
               <span className="motion-scan" aria-hidden="true" />
               <span className="motion-orbit" aria-hidden="true"><span /></span>
               <span className="motion-frame-label" aria-hidden="true">Antrocare / {collection.tone === "precision" ? "Care intelligence" : "Human progress"}</span>
