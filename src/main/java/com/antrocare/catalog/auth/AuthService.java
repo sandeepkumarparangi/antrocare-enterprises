@@ -136,6 +136,14 @@ public class AuthService {
         return authSessionRepository.findById(token.trim()).filter(session -> !session.isExpired());
     }
 
+    @Transactional
+    public void logout(String token) {
+        if (token == null || token.isBlank()) {
+            return;
+        }
+        authSessionRepository.deleteByToken(token.trim());
+    }
+
     public boolean isAdmin(String legacyAdminKey, String authToken) {
         if (isLegacyMainAdminKey(legacyAdminKey)) {
             return true;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  ChevronDown,
   ArrowRight,
   BadgeIndianRupee,
   Boxes,
@@ -34,7 +35,7 @@ import {
   UserPlus,
   X
 } from "lucide-react";
-import { API_BASE, approveProductChange, createPurchaseRequest, deleteAdminAccount, fetchAdminAccounts, fetchCategories, fetchCurrentSession, fetchMyPurchaseRequests, fetchOAuth2Status, fetchProductChangeRequests, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, mediaUrl, registerAdmin, rejectProductChange, sendTestEmail, signupUser, updateProduct, updatePurchaseRequestStatus, uploadPrescription } from "./api";
+import { API_BASE, approveProductChange, createPurchaseRequest, deleteAdminAccount, fetchAdminAccounts, fetchCategories, fetchCurrentSession, fetchMyPurchaseRequests, fetchOAuth2Status, fetchProductChangeRequests, fetchProducts, fetchPurchaseRequests, fetchStockAlerts, fetchSummary, loginAdmin, loginUser, logoutSession, mediaUrl, registerAdmin, rejectProductChange, sendTestEmail, signupUser, updateProduct, updatePurchaseRequestStatus, uploadPrescription } from "./api";
 
 const AUTH_SESSION_KEY = "antrocare-auth-session";
 const APP_SETTINGS_KEY = "antrocare-app-settings";
@@ -546,7 +547,14 @@ function App() {
     setAdminRegisterDraft((current) => ({ ...current, [field]: value }));
   }
 
-  function signOut() {
+  async function signOut() {
+    if (authSession?.token) {
+      try {
+        await logoutSession(authSession.token);
+      } catch {
+        setStatusMessage("Signed out on this device. The server session could not be confirmed.");
+      }
+    }
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     setAuthSession(null);
     setAdminAccounts([]);
@@ -977,6 +985,13 @@ function App() {
 
 function Header({ view, setView, authSession, isAdmin, isUser, onHeightChange, onSignOut }) {
   const headerRef = useRef(null);
+  const accountMenuRef = useRef(null);
+  const accountButtonRef = useRef(null);
+  const signOutButtonRef = useRef(null);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [accountError, setAccountError] = useState("");
+  const displayName = authSession?.displayName || authSession?.email || "Account";
 
   useEffect(() => {
     if (!headerRef.current) return undefined;
@@ -995,6 +1010,108 @@ function Header({ view, setView, authSession, isAdmin, isUser, onHeightChange, o
       window.removeEventListener("resize", updateHeight);
     };
   }, [onHeightChange]);
+
+  useEffect(() => {
+    if (!authSession) {
+      setIsAccountMenuOpen(false);
+      setIsSigningOut(false);
+      setAccountError("");
+    }
+  }, [authSession]);
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) return undefined;
+
+    function handlePointerDown(event) {
+      if (!accountMenuRef.current?.contains(event.target)) {
+        setIsAccountMenuOpen(false);
+      }
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsAccountMenuOpen(false);
+        accountButtonRef.current?.focus();
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isAccountMenuOpen]);
+
+  useEffect(() => {
+    if (isAccountMenuOpen) {
+      signOutButtonRef.current?.focus();
+    }
+  }, [isAccountMenuOpen]);
+
+  function toggleAccountMenu() {
+    setAccountError("");
+    setIsAccountMenuOpen((current) => !current);
+  }
+
+  function openAccountMenu() {
+    setAccountError("");
+    setIsAccountMenuOpen(true);
+  }
+
+  async function handleSignOut() {
+    if (isSigningOut) return;
+
+    setIsSigningOut(true);
+    setAccountError("");
+
+    try {
+      await onSignOut();
+      setIsAccountMenuOpen(false);
+    } catch {
+      setAccountError("Sign out failed. Please try again.");
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
+
+  function handleAccountButtonKeyDown(event) {
+    switch (event.key) {
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        toggleAccountMenu();
+        break;
+      case "ArrowDown":
+        event.preventDefault();
+        openAccountMenu();
+        break;
+      case "Escape":
+        if (isAccountMenuOpen) {
+          event.preventDefault();
+          setIsAccountMenuOpen(false);
+        }
+        break;
+    }
+  }
+
+  function handleSignOutKeyDown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setIsAccountMenuOpen(false);
+      accountButtonRef.current?.focus();
+    }
+
+    if (event.key === "Tab" && event.shiftKey) {
+      event.preventDefault();
+      setIsAccountMenuOpen(false);
+      accountButtonRef.current?.focus();
+    }
+  }
 
   return (
     <header ref={headerRef} className="app-header">
@@ -1024,14 +1141,43 @@ function Header({ view, setView, authSession, isAdmin, isUser, onHeightChange, o
             <Mail size={19} />
           </a>
           {authSession ? (
-            <button className="account-action" onClick={onSignOut} type="button">
-              <LogOut size={18} />
-              Sign out
-            </button>
+            <div className="account-menu-shell" ref={accountMenuRef}>
+              <button
+                ref={accountButtonRef}
+                className="account-action account-action-menu"
+                onClick={toggleAccountMenu}
+                onKeyDown={handleAccountButtonKeyDown}
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={isAccountMenuOpen}
+                aria-controls="header-account-menu"
+                title={displayName}
+              >
+                <span className="account-action-name">{displayName}</span>
+                <ChevronDown className={`account-action-chevron ${isAccountMenuOpen ? "account-action-chevron-open" : ""}`} size={16} />
+              </button>
+              {isAccountMenuOpen ? (
+                <div className="account-dropdown" id="header-account-menu" role="menu" aria-label="Account options">
+                  <button
+                    ref={signOutButtonRef}
+                    className="account-dropdown-item"
+                    onClick={handleSignOut}
+                    onKeyDown={handleSignOutKeyDown}
+                    type="button"
+                    role="menuitem"
+                    disabled={isSigningOut}
+                  >
+                    <LogOut size={16} />
+                    {isSigningOut ? "Signing out..." : "Sign Out"}
+                  </button>
+                  {accountError ? <p className="account-dropdown-error" role="alert">{accountError}</p> : null}
+                </div>
+              ) : null}
+            </div>
           ) : (
             <button className="account-action" onClick={() => setView("account")} type="button">
               <UserCircle size={19} />
-              Sign in
+              Sign In
             </button>
           )}
         </div>

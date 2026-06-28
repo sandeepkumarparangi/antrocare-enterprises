@@ -160,6 +160,13 @@ export function fetchCurrentSession(authToken) {
   return request("/api/auth/me", { authToken });
 }
 
+export function logoutSession(authToken) {
+  return request("/api/auth/logout", {
+    method: "POST",
+    authToken
+  });
+}
+
 export function registerAdmin(account, authToken) {
   return request("/api/auth/admin/register", {
     method: "POST",

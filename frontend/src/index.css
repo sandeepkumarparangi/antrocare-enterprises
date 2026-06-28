@@ -408,6 +408,85 @@
     background: #1a3b52;
   }
 
+  .account-action:focus-visible,
+  .header-icon-button:focus-visible,
+  .account-dropdown-item:focus-visible {
+    outline: 3px solid #8fe3d4;
+    outline-offset: 2px;
+  }
+
+  .account-menu-shell {
+    position: relative;
+  }
+
+  .account-action-menu {
+    max-width: min(15rem, 42vw);
+    justify-content: space-between;
+  }
+
+  .account-action-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .account-action-chevron {
+    flex: none;
+    transition: transform 0.2s ease;
+  }
+
+  .account-action-chevron-open {
+    transform: rotate(180deg);
+  }
+
+  .account-dropdown {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    min-width: 11rem;
+    padding: 0.5rem;
+    border: 1px solid #dce3e0;
+    border-radius: 0.75rem;
+    background: #fff;
+    box-shadow: 0 20px 40px rgba(17, 40, 58, 0.14);
+    z-index: 60;
+  }
+
+  .account-dropdown-item {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    border-radius: 0.55rem;
+    color: #18211f;
+    background: transparent;
+    font-size: 0.92rem;
+    font-weight: 800;
+    text-align: left;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .account-dropdown-item:hover {
+    background: #f4f8f7;
+    color: #07594d;
+  }
+
+  .account-dropdown-item:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+
+  .account-dropdown-error {
+    margin: 0.5rem 0 0;
+    color: #b42318;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
   .ace-logo-mark {
     width: 2.625rem;
     height: 2.625rem;
@@ -1788,8 +1867,16 @@
     padding: 0 0.875rem;
   }
 
-  .app-header .app-primary-nav,
+  .app-header .app-primary-nav {
+    display: none;
+  }
+
   .app-header-actions {
+    min-width: 0;
+    display: flex;
+  }
+
+  .app-header-actions .header-icon-button {
     display: none;
   }
 
@@ -1808,6 +1895,16 @@
   .ace-logo-mark {
     width: 2.4rem;
     height: 2.4rem;
+  }
+
+  .account-action {
+    min-height: 2.4rem;
+    padding: 0 0.8rem;
+    font-size: 0.81rem;
+  }
+
+  .account-action-menu {
+    max-width: 9.75rem;
   }
 
   .hero-panel {

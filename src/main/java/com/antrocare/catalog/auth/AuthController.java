@@ -117,6 +117,12 @@ public class AuthController {
             .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestHeader(value = "X-Auth-Token", required = false) String authToken) {
+        authService.logout(authToken);
+        return ResponseEntity.noContent().build();
+    }
+
     private String normalizeAttemptEmail(String email) {
         String normalized = email == null ? "" : email.trim().toLowerCase();
         return normalized.isBlank() ? "main-admin" : normalized;
